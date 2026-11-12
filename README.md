@@ -7,6 +7,14 @@ This is Phase 0. It is a working shell with a real catalog and launch paths, a
 demo platform client, and a live client aimed at endpoints that are specified
 but not deployed yet. It does **not** install or update games yet.
 
+## Download (Windows, 0.1.0)
+
+- Installer: [Lakeside_0.1.0_x64-setup.exe](https://github.com/lakesidegamedev/lakeside-launcher/releases/download/v0.1.0/Lakeside_0.1.0_x64-setup.exe)
+- Portable: [Lakeside.exe](https://github.com/lakesidegamedev/lakeside-launcher/releases/download/v0.1.0/Lakeside.exe)
+
+The build is unsigned, so SmartScreen warns once. The installer bootstraps
+WebView2 if it is missing; the portable exe expects the WebView2 runtime.
+
 ## What Phase 0 ships
 
 - Library grid with owned/free tiles, search, and a detail sheet.
