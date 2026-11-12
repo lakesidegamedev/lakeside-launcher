@@ -1,0 +1,46 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Lakeside",
+  "version": "0.1.0",
+  "identifier": "net.lakesidegames.launcher",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://127.0.0.1:1430",
+    "beforeBuildCommand": "npm run build:web",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Lakeside",
+        "width": 1180,
+        "height": 760,
+        "minWidth": 860,
+        "minHeight": 600,
+        "resizable": true,
+        "center": true,
+        "backgroundColor": "#0e1016"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost data:; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost https://lakesidegames.net https://auth.lakesidegames.net"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.png",
+      "icons/icon.ico",
+      "icons/icon.icns"
+    ],
+    "category": "Game",
+    "shortDescription": "Lakeside Games launcher",
+    "longDescription": "The Lakeside Games launcher: one library, one account and one update path for web and native Lakeside games."
+  }
+}

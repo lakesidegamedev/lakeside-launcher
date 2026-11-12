@@ -1,0 +1,296 @@
+import { useEffect, useState } from "react";
+import {
+  CATALOG,
+  PRODUCTS_BY_ID,
+  canLaunchDesktop,
+  executableFor,
+  libraryProducts,
+  ownsProduct,
+  storeProducts,
+  type Entitlements,
+  type Platform,
+  type Product,
+} from "./catalog";
+import { createPlatformClient, type Session } from "./platform/client";
+import {
+  beginSignIn,
+  isDesktop,
+  launchProduct,
+  onSignInCode,
+  openExternal,
+  openWebGame,
+} from "./lib/tauri";
+import { Sidebar } from "./components/Sidebar";
+import { LibraryView } from "./components/LibraryView";
+import { StoreView } from "./components/StoreView";
+import { AccountView } from "./components/AccountView";
+import { ProductDetail } from "./components/ProductDetail";
+
+export type View = "library" | "store" | "account";
+
+const VIEW_COPY: Record<View, { title: string; subtitle: string }> = {
+  library: { title: "Library", subtitle: "Your games, ready when you are" },
+  store: { title: "Store", subtitle: "Games and campaign packs for your account" },
+  account: { title: "Account", subtitle: "Session, purchases and devices" },
+};
+
+function message(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function detectPlatform(): Platform {
+  const ua = navigator.userAgent;
+  if (/Android/i.test(ua)) return "android";
+  if (/Windows/i.test(ua)) return "windows";
+  if (/Mac OS X|Macintosh/i.test(ua)) return "macos";
+  if (/Linux|X11/i.test(ua)) return "linux";
+  return "browser";
+}
+
+export function App(): JSX.Element {
+  const [client] = useState(createPlatformClient);
+  const [session, setSession] = useState<Session | null>(null);
+  const [entitlements, setEntitlements] = useState<Entitlements>({});
+  const [view, setView] = useState<View>("library");
+  const [selected, setSelected] = useState<Product | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const [nextSession, nextEntitlements] = await Promise.all([
+        client.getSession(),
+        client.getEntitlements(),
+      ]);
+      if (cancelled) return;
+      setSession(nextSession);
+      setEntitlements(nextEntitlements);
+      setReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(null), 7000);
+    return () => clearTimeout(timer);
+  }, [notice]);
+
+  const library = libraryProducts(entitlements);
+  const store = storeProducts(entitlements);
+
+  async function refreshEntitlements(): Promise<void> {
+    const next = await client.getEntitlements();
+    setEntitlements(next);
+  }
+
+  async function handleSignIn(): Promise<void> {
+    if (client.mode === "demo") {
+      const next = await client.exchange("demo");
+      setSession(next);
+      await refreshEntitlements();
+      setNotice("Signed in to a local demo session. Purchases are simulated.");
+      return;
+    }
+
+    try {
+      const start = await beginSignIn();
+      let stop: (() => void) | null = null;
+      stop = await onSignInCode(async (code) => {
+        stop?.();
+        try {
+          const next = await client.exchange(code);
+          setSession(next);
+          await refreshEntitlements();
+          setNotice(`Signed in as ${next.username}.`);
+        } catch (error) {
+          setNotice(message(error));
+        }
+      });
+      // Discord is the launcher's primary provider in Phase 0: the AHD cookie
+      // is scoped to ahousedividedgame.com and needs the sibling auth ingress.
+      await openExternal(
+        `https://auth.lakesidegames.net/auth/discord?return=${encodeURIComponent(start.returnUrl)}`,
+      );
+      setNotice("Finish signing in in your browser, then return to the launcher.");
+    } catch (error) {
+      setNotice(message(error));
+    }
+  }
+
+  async function handleSignOut(): Promise<void> {
+    await client.signOut();
+    setSession(null);
+    setEntitlements({});
+    setSelected(null);
+    setNotice("Signed out.");
+  }
+
+  async function handleLaunch(product: Product): Promise<void> {
+    const platform = detectPlatform();
+    const executable = executableFor(product, platform);
+    if (!executable) {
+      setNotice(`No ${platform} build is configured for ${product.title}.`);
+      return;
+    }
+    if (!isDesktop()) {
+      setNotice("Launching installed games needs the desktop launcher. Use Play online in this preview.");
+      return;
+    }
+    setBusy(product.id);
+    try {
+      await launchProduct(product.id, executable);
+      setNotice(`Launched ${product.title}.`);
+    } catch (error) {
+      setNotice(message(error));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleWeb(product: Product): Promise<void> {
+    if (!product.webUrl) return;
+    try {
+      if (isDesktop()) {
+        await openWebGame(product.id, product.webUrl, product.title);
+      } else {
+        window.open(product.webUrl, "_blank", "noopener,noreferrer");
+      }
+    } catch (error) {
+      setNotice(message(error));
+    }
+  }
+
+  function handleBuy(product: Product): void {
+    if (!product.productId) return;
+    const url = `https://lakesidegames.net/account/checkout?product=${encodeURIComponent(product.productId)}`;
+    if (isDesktop()) {
+      void openExternal(url).then(
+        () => setNotice("Checkout opened in your browser. Refresh purchases when you are done."),
+        (error: unknown) => setNotice(message(error)),
+      );
+    } else {
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
+  }
+
+  function handlePrimary(product: Product): void {
+    if (product.delivery === "web") {
+      void handleWeb(product);
+      return;
+    }
+    if (product.delivery === "native") {
+      if (canLaunchDesktop(product, entitlements)) {
+        void handleLaunch(product);
+      } else if (product.webUrl) {
+        void handleWeb(product);
+      } else if (product.priceCents !== null) {
+        handleBuy(product);
+      }
+    }
+  }
+
+  function primaryLabel(product: Product): string {
+    if (product.status === "soon") return "Coming soon";
+    if (product.delivery === "web") return "Play in browser";
+    if (canLaunchDesktop(product, entitlements)) return "Launch desktop";
+    if (product.webUrl) return "Play online";
+    if (product.priceCents !== null) return "Buy";
+    return "Unavailable";
+  }
+
+  const copy = VIEW_COPY[view];
+
+  return (
+    <div className="app-shell">
+      <Sidebar
+        view={view}
+        onView={setView}
+        session={session}
+        libraryCount={library.length}
+        storeCount={store.length}
+        mode={client.mode}
+        onSignIn={() => void handleSignIn()}
+      />
+
+      <main className="main">
+        <header className="topbar">
+          <div>
+            <h1>{copy.title}</h1>
+            <p>{copy.subtitle}</p>
+          </div>
+          <span className={`mode-pill ${client.mode}`}>
+            {client.mode === "demo" ? "Demo library" : "Live account"}
+          </span>
+        </header>
+
+        {!ready ? (
+          <div className="loading">Loading your library...</div>
+        ) : view === "library" ? (
+          <LibraryView
+            products={library}
+            entitlements={entitlements}
+            busy={busy}
+            onSelect={setSelected}
+            onPrimary={handlePrimary}
+            onWeb={(product) => void handleWeb(product)}
+            primaryLabel={primaryLabel}
+            signedIn={session !== null}
+            onSignIn={() => void handleSignIn()}
+            onBrowseStore={() => setView("store")}
+          />
+        ) : view === "store" ? (
+          <StoreView
+            products={store}
+            entitlements={entitlements}
+            onSelect={setSelected}
+            onBuy={handleBuy}
+            signedIn={session !== null}
+            onSignIn={() => void handleSignIn()}
+          />
+        ) : (
+          <AccountView
+            session={session}
+            entitlements={entitlements}
+            mode={client.mode}
+            onSignIn={() => void handleSignIn()}
+            onSignOut={() => void handleSignOut()}
+            onRefresh={() =>
+              void refreshEntitlements().then(
+                () => setNotice("Purchases refreshed."),
+                (error: unknown) => setNotice(message(error)),
+              )
+            }
+          />
+        )}
+      </main>
+
+      {selected ? (
+        <ProductDetail
+          product={selected}
+          entitlements={entitlements}
+          busy={busy === selected.id}
+          onClose={() => setSelected(null)}
+          onLaunch={() => void handleLaunch(selected)}
+          onWeb={() => void handleWeb(selected)}
+          onBuy={() => handleBuy(selected)}
+        />
+      ) : null}
+
+      {notice ? (
+        <div className="toast" role="status">
+          {notice}
+        </div>
+      ) : null}
+
+      <footer className="status-line">
+        {CATALOG.length} products · {PRODUCTS_BY_ID.size} ids ·{" "}
+        {isDesktop() ? "desktop shell" : "browser preview"}
+      </footer>
+    </div>
+  );
+}

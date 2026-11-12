@@ -1,0 +1,126 @@
+import { CATALOG, formatPrice, type Entitlements } from "../catalog";
+import type { Session } from "../platform/client";
+
+interface Props {
+  session: Session | null;
+  entitlements: Entitlements;
+  mode: "demo" | "live";
+  onSignIn: () => void;
+  onSignOut: () => void;
+  onRefresh: () => void;
+}
+
+export function AccountView({
+  session,
+  entitlements,
+  mode,
+  onSignIn,
+  onSignOut,
+  onRefresh,
+}: Props): JSX.Element {
+  const purchases = CATALOG.filter(
+    (product) => product.productId !== null && entitlements[product.productId] !== undefined,
+  );
+
+  return (
+    <section className="view account">
+      <div className="account-grid">
+        <article className="panel account-panel">
+          <h2 className="section-title">Session</h2>
+          {session ? (
+            <>
+              <div className="identity">
+                <span className="avatar large" aria-hidden="true">
+                  {session.username.slice(0, 1).toUpperCase()}
+                </span>
+                <div>
+                  <strong>{session.username}</strong>
+                  <p>{session.email ?? "No email on this provider"}</p>
+                  <span className="badge">{session.provider.toUpperCase()}</span>
+                </div>
+              </div>
+              <div className="panel-actions">
+                <button type="button" className="btn ghost" onClick={onRefresh}>
+                  Refresh purchases
+                </button>
+                <button type="button" className="btn danger" onClick={onSignOut}>
+                  Sign out
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="panel-copy">
+                Sign in with your Lakeside account to load the games and packs attached to it.
+                The launcher never handles card details; checkout opens in your browser.
+              </p>
+              <button type="button" className="btn primary" onClick={onSignIn}>
+                Sign in
+              </button>
+            </>
+          )}
+        </article>
+
+        <article className="panel account-panel">
+          <h2 className="section-title">Purchases</h2>
+          {purchases.length === 0 ? (
+            <p className="panel-copy">No purchases on this account yet.</p>
+          ) : (
+            <ul className="purchase-list">
+              {purchases.map((product) => {
+                const productId = product.productId;
+                if (!productId) return null;
+                const state = entitlements[productId];
+                return (
+                  <li key={product.id}>
+                    <span className="purchase-mark" style={{ background: product.accent }}>
+                      {product.mark}
+                    </span>
+                    <span className="purchase-copy">
+                      <strong>{product.title}</strong>
+                      <small>
+                        {product.priceCents === null
+                          ? "Free"
+                          : formatPrice(product.priceCents, product.currency)}{" "}
+                        · {productId}
+                      </small>
+                    </span>
+                    <span className={state === "owned" ? "badge owned" : "badge"}>
+                      {state === "owned" ? "Owned" : state}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </article>
+
+        <article className="panel account-panel">
+          <h2 className="section-title">Devices</h2>
+          <p className="panel-copy">
+            Device management arrives with durable launcher sessions. Today the desktop shell
+            holds one local session per machine.
+          </p>
+          <ul className="device-list">
+            <li>
+              <span>
+                <strong>This device</strong>
+                <small>Windows, macOS or Linux</small>
+              </span>
+              <span className="badge owned">Active</span>
+            </li>
+          </ul>
+        </article>
+
+        <article className="panel account-panel">
+          <h2 className="section-title">Platform mode</h2>
+          <p className="panel-copy">
+            {mode === "demo"
+              ? "Demo mode: sessions and entitlements are simulated locally. Set VITE_PLATFORM_MODE=live to use the platform API once the launcher endpoints are deployed."
+              : "Live mode: identity and entitlements come from lakeside-auth and lakeside-accounts. If the platform is unreachable the launcher boots from its last known library."}
+          </p>
+        </article>
+      </div>
+    </section>
+  );
+}
