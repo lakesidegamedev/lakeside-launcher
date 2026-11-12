@@ -3,14 +3,13 @@
 The Lakeside Games launcher: one library, one account and one update path for
 our web and native games.
 
-This is Phase 0. It is a working shell with a real catalog and launch paths, a
-demo platform client, and a live client aimed at endpoints that are specified
-but not deployed yet. It does **not** install or update games yet.
+This is the live launcher: signed auto-update, live Lakeside identity and
+entitlements, and one-click AHDClient install/update on Windows.
 
-## Download (Windows, 0.2.1)
+## Download (Windows, 0.3.0)
 
-- Installer: [Lakeside_0.2.1_x64-setup.exe](https://github.com/lakesidegamedev/lakeside-launcher/releases/download/v0.2.1/Lakeside_0.2.1_x64-setup.exe)
-- Portable: [Lakeside.exe](https://github.com/lakesidegamedev/lakeside-launcher/releases/download/v0.2.1/Lakeside.exe)
+- Installer: [Lakeside_0.3.0_x64-setup.exe](https://github.com/lakesidegamedev/lakeside-launcher/releases/download/v0.3.0/Lakeside_0.3.0_x64-setup.exe)
+- Portable: [Lakeside.exe](https://github.com/lakesidegamedev/lakeside-launcher/releases/download/v0.3.0/Lakeside.exe)
 
 The build is unsigned, so SmartScreen warns once. The installer bootstraps
 WebView2 if it is missing; the portable exe expects the WebView2 runtime.
@@ -57,15 +56,13 @@ products/
 
 | Mode | Behaviour |
 | --- | --- |
-| `demo` (default) | Local session and entitlements in `localStorage`. Purchases simulated. |
-| `live` | `POST /launcher/session`, `GET /launcher/entitlements`, `POST /launcher/logout` on `https://lakesidegames.net` (override with `VITE_PLATFORM_API`). |
+| `live` (desktop default) | Rust redeems the broker code at `POST /account/launcher/session`, stores the opaque token with 0600 permissions outside the webview, and reads `GET /account/launcher/entitlements`. Override the base with `VITE_PLATFORM_API`. |
+| `demo` (browser preview default) | Local session and entitlements in `localStorage`. Purchases simulated. Force it in a desktop build with `VITE_PLATFORM_MODE=demo`. |
 
-The live endpoints are the Phase 2 contract and are not deployed. A 404 is
-reported as such instead of being hidden.
-
-Sign-in uses Discord as the primary provider because the AHD session cookie is
-scoped to `.ahousedividedgame.com`; AHD sign-in needs the
-`auth.ahousedividedgame.com` sibling ingress described in
+The live endpoints are deployed: accounts issues a 30-day unified portal
+session, revocable through the same table as the browser portal. Sign-in uses
+Discord because the AHD session cookie is scoped to `.ahousedividedgame.com`;
+AHD sign-in needs the `auth.ahousedividedgame.com` sibling ingress described in
 `lakeside-auth/DESIGN.md`.
 
 ## Security rules
@@ -80,13 +77,13 @@ scoped to `.ahousedividedgame.com`; AHD sign-in needs the
   opens the existing `lakesidegames.net/account/checkout` flow.
 - Entitlements are display hints. The platform remains authoritative.
 
-## Not in Phase 0
+## Not yet
 
-- Download, install, update and rollback (the manifest service).
-- Durable device sessions and refresh tokens in `lakeside-auth`.
-- The launcher-facing entitlement endpoint in `lakeside-accounts`.
-- Signed artifacts and presigned download URLs.
 - Cloud saves, friends and presence.
+- Game rollback; installs replace the previous version in place.
+- Automatic game install on macOS and Linux.
+- Delta updates for large games.
+- Windows code signing, so SmartScreen still warns once.
 
 ## Release manifest
 
@@ -137,8 +134,8 @@ password beside it, outside the repository. CI reads the key from the
 `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` secrets.
 Losing either makes future updates impossible; back them up before rotating.
 
-Version 0.1.0 predates the updater, so 0.2.0 is the last manual install. Every
-build after that can update in place.
+Version 0.1.0 predates the updater. 0.2.x and 0.3.x update in place; users on
+0.1.0 need one manual install of 0.3.0 or later.
 
 ## Installing a game
 

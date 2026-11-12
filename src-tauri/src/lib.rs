@@ -743,7 +743,7 @@ async fn platform_exchange(app: AppHandle, code: String) -> Result<PlatformSessi
 
     let body = serde_json::json!({ "code": code }).to_string();
     let response = client
-        .post(format!("{}/launcher/session", platform_base()))
+        .post(format!("{}/account/launcher/session", platform_base()))
         .header("content-type", "application/json")
         .body(body)
         .send()
@@ -786,7 +786,7 @@ async fn platform_entitlements(app: AppHandle) -> Result<HashMap<String, String>
         .map_err(|error| format!("Could not build the platform client: {error}"))?;
 
     let response = client
-        .get(format!("{}/launcher/entitlements", platform_base()))
+        .get(format!("{}/account/launcher/entitlements", platform_base()))
         .bearer_auth(&stored.token)
         .send()
         .await

@@ -7,6 +7,7 @@
 // renders; the platform decides.
 
 import {
+  isDesktop,
   platformEntitlements,
   platformExchange,
   platformSession,
@@ -104,6 +105,7 @@ class LiveClient implements PlatformClient {
   readonly mode = "live" as const;
 
   async getSession(): Promise<Session | null> {
+    if (!isDesktop()) return null;
     return (await platformSession()) as Session | null;
   }
 
@@ -130,6 +132,9 @@ class LiveClient implements PlatformClient {
 }
 
 export function createPlatformClient(): PlatformClient {
-  const mode = (import.meta.env.VITE_PLATFORM_MODE as string | undefined) ?? "demo";
+  const requested = import.meta.env.VITE_PLATFORM_MODE as string | undefined;
+  // The shipped desktop app is live; a browser preview has no Rust bridge and
+  // falls back to the local demo library.
+  const mode = requested ?? (isDesktop() ? "live" : "demo");
   return mode === "live" ? new LiveClient() : new DemoClient();
 }
