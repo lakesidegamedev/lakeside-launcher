@@ -1,62 +1,51 @@
 # Launcher roadmap
 
-Phase 0 is in this repository. The rest is ordered by what unblocks the next
-real user action, not by what is most interesting to build.
+Status after 0.3.2. The launcher now updates itself, installs AHDClient from a
+signed manifest, and signs in to the live Lakeside account services.
 
-## Phase 1: signed manifest and installer
+## Shipped
 
-Goal: a player can install and update AHDClient from the launcher.
+1. **Signed updater**: Tauri updater, minisign key, installer in passive mode,
+   public feed at `https://lakesidegames.net/download/launcher/latest.json`.
+   Verified in CI by installing 0.3.1 and updating it to 0.3.2 in place.
+2. **Signed game manifest**: `manifest.json` plus a detached Ed25519 signature,
+   generated from GitHub Releases and verified in Rust before parsing.
+3. **Game install/update**: AHDClient downloads from the manifest, sha256 is
+   checked against the digest, the NSIS installer runs silently, and the
+   executable is verified under `%LOCALAPPDATA%\AHDClient`.
+4. **Live identity**: Discord sign-in through lakeside-auth, with a narrow
+   loopback allowance (`127.0.0.1:47832-47841/callback`).
+5. **Live entitlements**: lakeside-accounts issues a 30-day opaque portal
+   session and serves purchase entitlements as a Bearer API. The launcher keeps
+   the token in Rust with 0600 permissions, never in the webview.
+6. **Library, store, account UI**, real game art, installation progress and
+   one-click updates.
 
-1. **Manifest service** at `https://lakesidegames.net/launcher/manifest.json`
-   (static first, generated from the GitHub Releases API by the same box timer
-   that writes `download/releases.json`).
-2. Schema: channel, product, version, publishedAt, artifacts keyed by OS/arch
-   with url, size, sha256 and an Ed25519 signature over the artifact list.
-3. **Installer**: download to a temp file, verify size and sha256, verify the
-   manifest signature, unpack into `products/<id>/<version>/`, flip a pointer,
-   keep one previous version for rollback.
-4. **Updater**: check on launch in the background, apply on exit or restart.
-5. Decide who owns the AHD install: the hub or AHDClient. Never both.
-6. Sign Windows and macOS builds. A launcher that installs silently makes an
-   unsigned chain much more visible than a manual download does.
+## Remaining
 
-## Phase 2: identity and entitlements
+1. **Windows code signing.** The binaries are unsigned, so SmartScreen warns on
+   install and update. This is the largest remaining trust gap.
+2. **Paid artifact protection.** Native release artifacts currently point at
+   public GitHub release URLs. If a paid native game ever ships, its download
+   needs a presigned URL or a token-checking proxy. The entitlement gate is
+   cosmetic otherwise.
+3. **In-launcher checkout.** Checkout opens the existing account page in the
+   browser. An embedded, zero-capability checkout window is possible but not
+   required for correctness.
+4. **Game updates without reinstall.** The detail sheet offers Update, which
+   runs the vendor installer again. Delta updates and rollback are not built.
+5. **macOS and Linux installs.** Automatic install is Windows-only; those
+   builds launch from `LAKESIDE_INSTALL_ROOT` but are installed manually.
+6. **Cloud saves, friends and presence.** AHDClient saves are versioned JSON
+   and are the natural next sync unit.
 
-Goal: sign in once, see the right library, buy without leaving the flow.
+## Owner decisions
 
-1. `lakeside-auth`: persistent session store, refresh rotation, device records
-   and revocation, and a loopback redirect allowance for the launcher client
-   (`http://127.0.0.1:<ephemeral>/callback`). Phase 1 is in-memory, single
-   process, 24 hours.
-2. `lakeside-accounts`: `POST /launcher/session`, `GET /launcher/entitlements`,
-   `POST /launcher/logout`, authenticated by the device token, returning
-   `{ productId: "owned" | "refunded" }`.
-3. **Offline grant**: a signed, short-lived entitlement cache (7 to 14 days) so
-   a purchased native game boots without the platform.
-4. **Launch token**: the game receives a scoped token, never the launcher's
-   device token.
-
-## Phase 3: commerce and distribution
-
-1. Presigned artifact URLs or a token-checking proxy. Public GitHub Release
-   assets make an entitlement gate cosmetic.
-2. Checkout handoff from the launcher, then entitlement refresh on return.
-3. Refund and chargeback propagation into the launcher library.
-4. Delta updates for large content packs.
-
-## Phase 4: platform features
-
-Cloud saves (AHDClient saves are already versioned JSON envelopes), friends and
-presence, crash reporting, beta channels, and per-product launch arguments.
-
-## Open owner decisions
-
-- **Lakeside account id.** Purchases are keyed by `ahd_user_id` or email today.
-  A launcher that accepts Discord needs an explicit account-linking policy and
-  a migration of the commerce key, or it must require AHD sign-in for anything
-  purchasable.
+- **Signing identity.** One Windows certificate and one Apple Developer
+  identity, or the updater stays unsigned and warns.
 - **Canonical channel.** Several games are free downloads from public GitHub
   repositories. Decide per product whether the launcher becomes the canonical
   distribution path.
-- **Signing identity.** One Windows certificate and one Apple Developer
-  identity, or the updater cannot be trusted at scale.
+- **Account key.** The launcher uses the unified portal session: AHD ids for
+  AHD sign-in, `discord:<id>` plus email for Discord purchases. Explicit
+  account linking across providers is still not built.
