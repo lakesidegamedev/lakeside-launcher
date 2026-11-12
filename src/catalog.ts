@@ -49,6 +49,12 @@ export interface Product {
    * and, when signed in, a single-use code bound to this client id.
    */
   handoffClientId?: string;
+  /**
+   * Native app found through its own Windows uninstall entry (publisher
+   * "Lakeside Games") rather than the launcher install root. The tile only
+   * shows when the app is installed or the manifest publishes an installer.
+   */
+  registryApp?: boolean;
   accent: string;
   mark: string;
   /** Card art, 16:9. Null falls back to the accent and mark. */
@@ -98,6 +104,29 @@ export const CATALOG: readonly Product[] = [
     webUrl: "https://sim.ahousedividedgame.com",
     webLabel: "Play in browser",
     executables: null,
+    accent: "#3f6f8f",
+    mark: "MoV",
+    art: marginOfVictoryArt,
+    installSizeMb: null,
+  },
+  {
+    id: "margin-of-victory",
+    game: "electioneer",
+    title: "Margin of Victory (desktop)",
+    tagline: "The desktop app for Margin of Victory",
+    description:
+      "The Windows desktop app for Margin of Victory. Signing in through the launcher carries your account into the app.",
+    delivery: "native",
+    status: "available",
+    platforms: ["windows"],
+    priceCents: null,
+    currency: "usd",
+    productId: null,
+    webUrl: "https://sim.ahousedividedgame.com",
+    webLabel: "Play in browser",
+    executables: null,
+    handoffClientId: "margin-of-victory",
+    registryApp: true,
     accent: "#3f6f8f",
     mark: "MoV",
     art: marginOfVictoryArt,

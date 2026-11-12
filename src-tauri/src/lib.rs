@@ -227,6 +227,7 @@ pub struct ReleaseManifest {
 #[serde(rename_all = "camelCase")]
 struct SignInStart {
     return_url: String,
+    port: u16,
     state: String,
 }
 
@@ -366,19 +367,30 @@ async fn launch_product(
 
     let root = install_root(&app);
     let binary = safe_join(&root, &executable)?;
+    spawn_game(&app, &binary, handoff_client_id.as_deref()).await
+}
+
+/// Start a game binary detached from the launcher. Games that opt in
+/// (`handoff_client_id`) get the launcher environment and, when signed in, a
+/// handoff code.
+async fn spawn_game(
+    app: &AppHandle,
+    binary: &Path,
+    handoff_client_id: Option<&str>,
+) -> Result<(), String> {
     let working_dir = binary
         .parent()
         .ok_or_else(|| "The game executable has no parent directory.".to_string())?
         .to_path_buf();
 
-    let mut command = std::process::Command::new(&binary);
+    let mut command = std::process::Command::new(binary);
     command.current_dir(working_dir);
     command.stdin(std::process::Stdio::null());
     command.stdout(std::process::Stdio::null());
     command.stderr(std::process::Stdio::null());
 
-    if let Some(client_id) = handoff_client_id.as_deref() {
-        let code = fetch_handoff_code(&app, client_id).await;
+    if let Some(client_id) = handoff_client_id {
+        let code = fetch_handoff_code(app, client_id).await;
         command.env_remove("LAKESIDE_HANDOFF_CODE");
         for (key, value) in installer::launch_env(env!("CARGO_PKG_VERSION"), code.as_deref()) {
             command.env(key, value);
@@ -395,6 +407,111 @@ async fn launch_product(
         .spawn()
         .map(|_| ())
         .map_err(|error| format!("Could not start the game: {error}"))
+}
+
+/// A Lakeside desktop app found through its own Windows uninstall entry.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopApp {
+    pub version: String,
+    pub install_location: String,
+    #[serde(skip)]
+    pub executable: PathBuf,
+}
+
+/// Find an installed Lakeside desktop app by display name and publisher in the
+/// uninstall registry (per-user first, then all-users).
+#[cfg(target_os = "windows")]
+fn find_desktop_app(product_id: &str) -> Option<DesktopApp> {
+    use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ};
+    use winreg::RegKey;
+
+    let display_name = installer::desktop_app_display_name(product_id)?;
+    let paths = [
+        (HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Uninstall"),
+        (HKEY_LOCAL_MACHINE, r"Software\Microsoft\Windows\CurrentVersion\Uninstall"),
+        (
+            HKEY_LOCAL_MACHINE,
+            r"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
+        ),
+    ];
+    for (hive, path) in paths {
+        let Ok(uninstall) = RegKey::predef(hive).open_subkey_with_flags(path, KEY_READ) else {
+            continue;
+        };
+        for name in uninstall.enum_keys().flatten() {
+            let Ok(key) = uninstall.open_subkey_with_flags(&name, KEY_READ) else {
+                continue;
+            };
+            let display: String = key.get_value("DisplayName").unwrap_or_default();
+            let publisher: String = key.get_value("Publisher").unwrap_or_default();
+            if display.trim() != display_name || publisher.trim() != installer::DESKTOP_APP_PUBLISHER {
+                continue;
+            }
+            let version: String = key.get_value("DisplayVersion").unwrap_or_default();
+            let location: String = key
+                .get_value::<String, _>("InstallLocation")
+                .unwrap_or_default()
+                .trim()
+                .trim_matches('"')
+                .to_string();
+            let icon: Option<String> = key
+                .get_value::<String, _>("DisplayIcon")
+                .ok()
+                .and_then(|value| installer::exe_from_display_icon(&value));
+            let executable = match icon {
+                Some(path) => PathBuf::from(path),
+                None if !location.is_empty() => Path::new(&location).join(format!("{display_name}.exe")),
+                None => continue,
+            };
+            if !executable.is_file() {
+                continue;
+            }
+            let install_location = if location.is_empty() {
+                executable
+                    .parent()
+                    .map(|dir| dir.to_string_lossy().to_string())
+                    .unwrap_or_default()
+            } else {
+                location
+            };
+            return Some(DesktopApp {
+                version: version.trim().to_string(),
+                install_location,
+                executable,
+            });
+        }
+    }
+    None
+}
+
+#[cfg(not(target_os = "windows"))]
+fn find_desktop_app(_product_id: &str) -> Option<DesktopApp> {
+    None
+}
+
+/// Installed desktop app info (version and folder) for the product, if any.
+#[tauri::command]
+fn detect_desktop_app(product_id: String) -> Option<DesktopApp> {
+    find_desktop_app(&product_id)
+}
+
+/// Launch a registry-detected desktop app. The path is re-read from the
+/// registry here, never taken from the UI.
+#[tauri::command]
+async fn launch_desktop_app(
+    app: AppHandle,
+    product_id: String,
+    handoff_client_id: Option<String>,
+) -> Result<(), String> {
+    if let Some(client_id) = handoff_client_id.as_deref() {
+        if !installer::valid_id(client_id) {
+            return Err("Invalid handoff client id.".to_string());
+        }
+    }
+    let found = find_desktop_app(&product_id)
+        .ok_or_else(|| "That app is not installed on this computer.".to_string())?;
+    spawn_game(&app, &found.executable, handoff_client_id.as_deref()).await
 }
 
 /// Open a game inside a dedicated window with no launcher capabilities. Reuses
@@ -568,6 +685,7 @@ fn begin_sign_in(app: AppHandle) -> Result<SignInStart, String> {
 
     Ok(SignInStart {
         return_url: format!("http://127.0.0.1:{port}/callback?state={state}"),
+        port,
         state,
     })
 }
@@ -1304,6 +1422,8 @@ pub fn run() {
     builder
         .invoke_handler(tauri::generate_handler![
             launch_product,
+            detect_desktop_app,
+            launch_desktop_app,
             open_web_game,
             open_external,
             begin_sign_in,

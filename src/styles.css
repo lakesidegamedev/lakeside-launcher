@@ -198,3 +198,4 @@ button { font: inherit; color: inherit; }
   .app-shell.has-detail { grid-template-columns: 164px minmax(0, 1fr) 300px; }
   .grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
 }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; }

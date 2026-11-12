@@ -207,6 +207,37 @@ pub fn launch_env(launcher_version: &str, handoff_code: Option<&str>) -> Vec<(St
     vars
 }
 
+/// Desktop apps the launcher detects from their own uninstall entry.
+/// Publisher must be `DESKTOP_APP_PUBLISHER`.
+#[allow(dead_code)]
+pub const DESKTOP_APP_PUBLISHER: &str = "Lakeside Games";
+
+pub fn desktop_app_display_name(product_id: &str) -> Option<&'static str> {
+    match product_id {
+        "margin-of-victory" => Some("Margin of Victory"),
+        _ => None,
+    }
+}
+
+/// Executable path from an uninstall `DisplayIcon` value such as
+/// `"C:\Apps\Game\game.exe",0`.
+#[allow(dead_code)]
+pub fn exe_from_display_icon(value: &str) -> Option<String> {
+    let mut text = value.trim();
+    if let Some((head, tail)) = text.rsplit_once(',') {
+        let digits = tail.trim().trim_start_matches('-');
+        if !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit()) {
+            text = head.trim();
+        }
+    }
+    let text = text.trim_matches('"').trim();
+    if text.to_ascii_lowercase().ends_with(".exe") {
+        Some(text.to_string())
+    } else {
+        None
+    }
+}
+
 /// Pull `code` out of the handoff response. Errors never echo the body.
 pub fn parse_handoff_code(bytes: &[u8]) -> Option<String> {
     let value: serde_json::Value = serde_json::from_slice(bytes).ok()?;
@@ -219,6 +250,24 @@ pub fn parse_handoff_code(bytes: &[u8]) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn parses_display_icon_paths() {
+        assert_eq!(
+            super::exe_from_display_icon("\"C:\\Apps\\Game\\game.exe\",0"),
+            Some("C:\\Apps\\Game\\game.exe".to_string())
+        );
+        assert_eq!(
+            super::exe_from_display_icon("C:\\Apps\\Game\\game.exe"),
+            Some("C:\\Apps\\Game\\game.exe".to_string())
+        );
+        assert_eq!(super::exe_from_display_icon("C:\\Apps\\Game\\game.ico"), None);
+        assert_eq!(
+            super::desktop_app_display_name("margin-of-victory"),
+            Some("Margin of Victory")
+        );
+        assert_eq!(super::desktop_app_display_name("ahd"), None);
+    }
+
     use super::*;
 
     #[test]

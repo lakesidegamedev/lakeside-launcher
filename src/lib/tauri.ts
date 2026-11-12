@@ -15,6 +15,7 @@ async function invoke<T>(command: string, args?: Record<string, unknown>): Promi
 
 export interface SignInStart {
   returnUrl: string;
+  port: number;
   state: string;
 }
 
@@ -45,6 +46,30 @@ export async function launchProduct(
   await invoke<void>("launch_product", {
     productId,
     executable,
+    handoffClientId: handoffClientId ?? null,
+  });
+}
+
+export interface DesktopApp {
+  version: string;
+  installLocation: string;
+}
+
+/** Windows app detected from its own uninstall registry entry, or null. */
+export async function detectDesktopApp(productId: string): Promise<DesktopApp | null> {
+  try {
+    return await invoke<DesktopApp | null>("detect_desktop_app", { productId });
+  } catch {
+    return null;
+  }
+}
+
+export async function launchDesktopApp(
+  productId: string,
+  handoffClientId?: string,
+): Promise<void> {
+  await invoke<void>("launch_desktop_app", {
+    productId,
     handoffClientId: handoffClientId ?? null,
   });
 }

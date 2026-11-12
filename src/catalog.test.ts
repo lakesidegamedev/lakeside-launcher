@@ -35,7 +35,7 @@ describe("catalog integrity", () => {
 
   it("gives every native product a windows and linux executable", () => {
     for (const product of CATALOG) {
-      if (product.delivery === "native") {
+      if (product.delivery === "native" && !product.registryApp) {
         expect(product.executables?.windows, product.id).toBeTruthy();
         expect(product.executables?.linux, product.id).toBeTruthy();
       }
@@ -67,6 +67,15 @@ describe("ownership", () => {
     expect(ids).toContain("ahd");
     expect(ids).toContain("electioneer");
     expect(ids).toContain("grand-century");
+  });
+
+  it("keeps the Margin of Victory web tile and adds a registry-detected desktop entry", () => {
+    const web = CATALOG.find((product) => product.id === "electioneer")!;
+    const desktop = CATALOG.find((product) => product.id === "margin-of-victory")!;
+    expect(web.delivery).toBe("web");
+    expect(desktop.registryApp).toBe(true);
+    expect(desktop.handoffClientId).toBe("margin-of-victory");
+    expect(desktop.platforms).toEqual(["windows"]);
   });
 
   it("lists unowned priced products in the store", () => {

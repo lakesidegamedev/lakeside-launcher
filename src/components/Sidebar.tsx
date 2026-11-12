@@ -1,6 +1,7 @@
 import markUrl from "../assets/lakeside-mark.svg";
 import type { Session } from "../platform/client";
 import type { View } from "../App";
+import type { SignInProvider } from "../lib/signin";
 
 interface Props {
   view: View;
@@ -9,7 +10,7 @@ interface Props {
   libraryCount: number;
   storeCount: number;
   mode: "demo" | "live";
-  onSignIn: () => void;
+  onSignIn: (provider: SignInProvider) => void;
 }
 
 const ITEMS: readonly { id: View; label: string }[] = [
@@ -67,9 +68,14 @@ export function Sidebar({
             </span>
           </button>
         ) : (
-          <button type="button" className="btn primary wide" onClick={onSignIn}>
-            Sign in
-          </button>
+          <>
+            <button type="button" className="btn primary wide" onClick={() => onSignIn("discord")}>
+              Sign in with Discord
+            </button>
+            <button type="button" className="btn wide" onClick={() => onSignIn("ahd")}>
+              Sign in with A House Divided
+            </button>
+          </>
         )}
         <p className="mode-note">{mode === "demo" ? "Demo data, local only" : "Connected"}</p>
       </div>
