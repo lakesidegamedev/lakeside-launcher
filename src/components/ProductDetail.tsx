@@ -161,7 +161,7 @@ export function ProductDetail({
                     {busy ? "Opening..." : "Launch desktop"}
                   </button>
                 )}
-                {installedVersion && updateAvailable ? (
+                {installedVersion && updateAvailable && canInstall ? (
                   <button type="button" className="btn ghost" onClick={onLaunch} disabled={busy}>
                     {busy ? "Opening..." : "Launch desktop"}
                   </button>
@@ -202,6 +202,12 @@ export function ProductDetail({
             <p className="detail-note">
               The desktop client needs a purchase. The browser game stays free and does not
               need this install.
+            </p>
+          ) : null}
+          {installedVersion && updateAvailable && !canInstall ? (
+            <p className="detail-note">
+              Version {release?.version ?? "newer"} is available, but automatic installation is
+              Windows-only. Download it from the release page.
             </p>
           ) : null}
           {product.delivery === "content" ? (

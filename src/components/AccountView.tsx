@@ -101,8 +101,8 @@ export function AccountView({
         <article className="panel account-panel">
           <h2 className="section-title">Devices</h2>
           <p className="panel-copy">
-            Device management arrives with durable launcher sessions. Today the desktop shell
-            holds one local session per machine.
+            Device management is not built yet. The launcher holds one local session per
+            machine, stored outside the webview.
           </p>
           <ul className="device-list">
             <li>

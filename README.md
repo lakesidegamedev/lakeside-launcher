@@ -6,6 +6,16 @@ our web and native games.
 This is the live launcher: signed auto-update, live Lakeside identity and
 entitlements, and one-click AHDClient install/update on Windows.
 
+## Screenshots
+
+| Library | Game detail |
+| --- | --- |
+| ![Library](docs/screenshots/library.png) | ![AHDClient detail](docs/screenshots/detail.png) |
+
+| Store | Account |
+| --- | --- |
+| ![Store](docs/screenshots/store.png) | ![Account](docs/screenshots/account.png) |
+
 ## Download (Windows, 0.4.0)
 
 - Installer: [Lakeside_0.4.0_x64-setup.exe](https://github.com/lakesidegamedev/lakeside-launcher/releases/download/v0.4.0/Lakeside_0.4.0_x64-setup.exe)
