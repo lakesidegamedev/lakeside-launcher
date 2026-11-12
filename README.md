@@ -80,6 +80,35 @@ scoped to `.ahousedividedgame.com`; AHD sign-in needs the
 - Signed artifacts and presigned download URLs.
 - Cloud saves, friends and presence.
 
+## Release manifest
+
+`scripts/manifest.mjs` turns GitHub Releases into the launcher's Phase 1
+manifest. It maps each release asset to an OS/arch key and records name, size,
+sha256 (when GitHub exposes a digest) and download URL.
+
+```sh
+npm run manifest -- --channel stable --out manifest/manifest.json
+```
+
+Set `LAUNCHER_MANIFEST_KEY` to an Ed25519 private key in PEM form to sign the
+manifest. Production builds must reject unsigned manifests; the CLI warns and
+emits `"signature": null` when the key is absent.
+
+Artifact keys: `windows-x64`, `macos-arm64`, `macos-x64`, `linux-x64`,
+`linux-deb`, `android`. The pure transform lives in `buildManifest` and has
+fixture coverage in `scripts/manifest.test.mjs`.
+
+## CI and desktop builds
+
+- `.github/workflows/verify.yml` runs the frontend tests, web build, Rust check
+  and Rust unit tests.
+- `.github/workflows/desktop-bundles.yml` builds the Windows NSIS installer and
+  a raw `Lakeside.exe` on `windows-latest`, uploaded as
+  `lakeside-windows-x64`. Run it from Actions or push a `v*` tag.
+
+The Windows binaries are unsigned for now. SmartScreen will warn until a
+signing certificate is configured.
+
 ## Catalog sync
 
 `src/catalog.ts` copies the commercial fields from
