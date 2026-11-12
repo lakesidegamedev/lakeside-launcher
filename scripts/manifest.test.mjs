@@ -85,7 +85,23 @@ describe("manifest", () => {
 
   it("maps Corporate Warfare and keeps products separate", () => {
     assert.equal(manifest.products["corporate-warfare"].version, "1.7.1");
-    assert.equal(manifest.products["corporate-warfare"].artifacts["windows-x64"].kind, "msi");
+    assert.equal(manifest.products["corporate-warfare"].artifacts["windows-msi"].kind, "msi");
+  });
+
+  it("emits Inno and AppImage kinds with sha256 for Corporate Warfare 2.0", () => {
+    const release = {
+      tag_name: "v2.0.0",
+      assets: [
+        { name: "CorporateWarfare-2.0.0-setup.exe", browser_download_url: "https://example.test/cw-setup.exe", size: 10, digest: "sha256:AB12" },
+        { name: "CorporateWarfare-2.0.0-x86_64.AppImage", browser_download_url: "https://example.test/cw.AppImage", size: 11, digest: "sha256:CD34" },
+      ],
+    };
+    const built = buildManifest({ releases: { "lakesidegamedev/corporate-warfare": release } });
+    const cw = built.products["corporate-warfare"].artifacts;
+    assert.equal(cw["windows-x64"].kind, "inno");
+    assert.equal(cw["windows-x64"].sha256, "ab12");
+    assert.equal(cw["linux-x64"].kind, "appimage");
+    assert.equal(cw["linux-x64"].sha256, "cd34");
   });
 
   it("skips products with no release or no matching assets", () => {

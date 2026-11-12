@@ -37,7 +37,12 @@ export const PRODUCTS = [
     name: "Corporate Warfare",
     repo: "lakesidegamedev/corporate-warfare",
     artifacts: [
-      { key: "windows-x64", match: /\.msi$/i, kind: "msi" },
+      // Inno Setup program (CorporateWarfare-<version>-setup.exe) and AppImage.
+      // Paid builds are delivered through the accounts download endpoint; the
+      // manifest entry supplies version, sha256 and installer kind.
+      { key: "windows-x64", match: /-setup\.exe$/i, kind: "inno" },
+      { key: "linux-x64", match: /\.AppImage$/i, kind: "appimage" },
+      { key: "windows-msi", match: /\.msi$/i, kind: "msi" },
       { key: "linux-deb", match: /_amd64\.deb$/i, kind: "deb" },
     ],
   },

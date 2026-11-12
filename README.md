@@ -93,7 +93,7 @@ AHD sign-in needs the `auth.ahousedividedgame.com` sibling ingress described in
 
 - Cloud saves, friends and presence.
 - Game rollback; installs replace the previous version in place.
-- Automatic game install on macOS and Linux.
+- Automatic game install on macOS (unsigned DMG). Linux installs AppImages only.
 - Delta updates for large games.
 - Windows code signing, so SmartScreen still warns once.
 
@@ -229,3 +229,22 @@ signing certificate is configured.
 service exists, a price or product id change must be made in both places, and
 `src/catalog.test.ts` guards the local invariants (unique ids, https web URLs,
 per-platform executables).
+
+## Installs, paid downloads and game handoff (0.5 groundwork)
+
+- Manifest artifacts carry `kind` (`nsis`, `inno`, `appimage`, `dmg`) and a
+  mandatory `sha256`. Nothing runs before the hash matches the signed manifest.
+- Windows Inno Setup products run `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+  /DIR="<per-user folder>"`. The installed version comes from the Inno AppId
+  uninstall key. Update shows only when the manifest is newer; otherwise the
+  action is Reinstall. Saves live outside the install folder and are never
+  touched.
+- Linux AppImages are downloaded, verified, marked executable and placed under
+  the per-user data directory.
+- Catalog products with `authenticatedDownload` fetch through
+  `GET /account/launcher/download/<productId>/<platform>` with the stored
+  session. The 302 is followed without the token and the target host must be on
+  the download allowlist.
+- Catalog products with `handoffClientId` start with `LAKESIDE_LAUNCHER=1`,
+  `LAKESIDE_LAUNCHER_VERSION` and, when signed in, a single-use
+  `LAKESIDE_HANDOFF_CODE` (5 second timeout, never logged or stored).

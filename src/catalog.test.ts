@@ -95,3 +95,28 @@ describe("platform helpers", () => {
     expect(formatPrice(499, "usd")).toBe("$4.99");
   });
 });
+
+describe("native delivery metadata", () => {
+  it("keeps AHD on the public manifest URL with no handoff", () => {
+    const ahd = CATALOG.find((product) => product.id === "ahd");
+    expect(ahd?.authenticatedDownload).toBeUndefined();
+    expect(ahd?.handoffClientId).toBeUndefined();
+  });
+
+  it("opts Corporate Warfare into paid downloads and the handoff", () => {
+    const cw = CATALOG.find((product) => product.id === "corporate-warfare");
+    expect(cw?.productId).toBe("corporate-warfare");
+    expect(cw?.authenticatedDownload).toBe(true);
+    expect(cw?.handoffClientId).toBe("corporate-warfare-desktop");
+    expect(cw?.executables?.linux).toMatch(/\.AppImage$/);
+  });
+
+  it("supports the right installer kinds per platform", async () => {
+    const { installerSupported } = await import("./catalog");
+    expect(installerSupported("nsis", "windows")).toBe(true);
+    expect(installerSupported("inno", "windows")).toBe(true);
+    expect(installerSupported("appimage", "linux")).toBe(true);
+    expect(installerSupported("appimage", "windows")).toBe(false);
+    expect(installerSupported("dmg", "macos")).toBe(false);
+  });
+});

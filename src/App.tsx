@@ -3,6 +3,7 @@ import {
   CATALOG,
   canLaunchDesktop,
   executableFor,
+  installerSupported,
   libraryProducts,
   storeProducts,
   type Entitlements,
@@ -238,7 +239,8 @@ export function App(): JSX.Element {
   function canInstall(product: Product): boolean {
     if (!isDesktop() || product.delivery !== "native") return false;
     const artifact = artifactFor(product);
-    return artifact?.kind === "nsis" && !!artifact.sha256;
+    if (!artifact?.sha256) return false;
+    return installerSupported(artifact.kind, detectPlatform());
   }
 
   function latestVersion(product: Product): string | null {
@@ -269,6 +271,7 @@ export function App(): JSX.Element {
         sha256: artifact.sha256,
         fileName: artifact.name,
         kind: artifact.kind,
+        commercialId: product.authenticatedDownload ? (product.productId ?? undefined) : undefined,
       });
       setInstalled((previous) => ({
         ...previous,
@@ -287,7 +290,8 @@ export function App(): JSX.Element {
     }
   }
 
-  async function handleLaunch(product: Product): Promise<void> {    const platform = detectPlatform();
+  async function handleLaunch(product: Product): Promise<void> {
+    const platform = detectPlatform();
     const executable = executableFor(product, platform);
     if (!executable) {
       setNotice(`No ${platform} build is configured for ${product.title}.`);
@@ -299,7 +303,7 @@ export function App(): JSX.Element {
     }
     setBusy(product.id);
     try {
-      await launchProduct(product.id, executable);
+      await launchProduct(product.id, executable, product.handoffClientId);
       setNotice(`Launched ${product.title}.`);
     } catch (error) {
       setNotice(message(error));
