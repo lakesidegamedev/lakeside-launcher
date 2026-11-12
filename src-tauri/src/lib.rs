@@ -40,7 +40,7 @@ const GAME_HOSTS: &[&str] = &["lakesidegames.net", "ahousedividedgame.com"];
 const DOWNLOAD_HOSTS: &[&str] = &["github.com", "githubusercontent.com", "lakesidegames.net"];
 
 #[cfg(target_os = "windows")]
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct InstallProgress {
     product_id: String,
