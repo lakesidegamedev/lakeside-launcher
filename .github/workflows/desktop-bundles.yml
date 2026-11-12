@@ -1,0 +1,46 @@
+name: desktop bundles
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0.6.2
+        with:
+          args: --bundles nsis
+
+      - name: Collect artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          Copy-Item src-tauri/target/release/lakeside-launcher.exe artifacts/Lakeside.exe
+          Copy-Item src-tauri/target/release/bundle/nsis/*.exe artifacts/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lakeside-windows-x64
+          path: artifacts/*
+          if-no-files-found: error

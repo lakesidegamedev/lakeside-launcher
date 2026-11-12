@@ -7,6 +7,11 @@
 // for access. Keep ids in sync with products.js until the manifest service
 // becomes the single source.
 
+import ahdArt from "./assets/media/ahd.webp";
+import corporateWarfareArt from "./assets/media/corporate-warfare.webp";
+import grandCenturyArt from "./assets/media/grand-century.webp";
+import marginOfVictoryArt from "./assets/media/margin-of-victory.webp";
+
 export type Delivery = "native" | "web" | "content";
 export type ProductStatus = "available" | "soon";
 export type Platform = "windows" | "macos" | "linux" | "android" | "browser";
@@ -36,6 +41,8 @@ export interface Product {
   executables: ExecutableMap | null;
   accent: string;
   mark: string;
+  /** Card art, 16:9. Null falls back to the accent and mark. */
+  art: string | null;
   installSizeMb: number | null;
 }
 
@@ -62,6 +69,7 @@ export const CATALOG: readonly Product[] = [
     },
     accent: "#b23a48",
     mark: "AHD",
+    art: ahdArt,
     installSizeMb: 210,
   },
   {
@@ -82,6 +90,7 @@ export const CATALOG: readonly Product[] = [
     executables: null,
     accent: "#3f6f8f",
     mark: "MoV",
+    art: marginOfVictoryArt,
     installSizeMb: null,
   },
   {
@@ -105,6 +114,7 @@ export const CATALOG: readonly Product[] = [
     },
     accent: "#7a6a3a",
     mark: "CW",
+    art: corporateWarfareArt,
     installSizeMb: 84,
   },
   {
@@ -125,6 +135,7 @@ export const CATALOG: readonly Product[] = [
     executables: null,
     accent: "#4b6b57",
     mark: "GC",
+    art: grandCenturyArt,
     installSizeMb: null,
   },
   {
@@ -144,6 +155,7 @@ export const CATALOG: readonly Product[] = [
     executables: null,
     accent: "#3f6f8f",
     mark: "US",
+    art: null,
     installSizeMb: null,
   },
   {
@@ -163,6 +175,7 @@ export const CATALOG: readonly Product[] = [
     executables: null,
     accent: "#3f6f8f",
     mark: "UK",
+    art: null,
     installSizeMb: null,
   },
   {
@@ -182,6 +195,7 @@ export const CATALOG: readonly Product[] = [
     executables: null,
     accent: "#3f6f8f",
     mark: "GL",
+    art: null,
     installSizeMb: null,
   },
   {
@@ -201,6 +215,7 @@ export const CATALOG: readonly Product[] = [
     executables: null,
     accent: "#3f6f8f",
     mark: "ALL",
+    art: null,
     installSizeMb: null,
   },
 ];

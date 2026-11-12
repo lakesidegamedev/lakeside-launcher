@@ -37,9 +37,38 @@ export function LibraryView({
           product.game.toLowerCase().includes(needle),
       )
     : products;
+  const featured = products.find((product) => product.id === "ahd") ?? products[0];
 
   return (
     <section className="view">
+      {featured && !needle ? (
+        <article
+          className="feature"
+          style={{ ["--card-accent" as string]: featured.accent }}
+        >
+          {featured.art ? <img className="feature-art" src={featured.art} alt="" /> : null}
+          <div className="feature-copy">
+            <p className="eyebrow">Featured</p>
+            <h2>{featured.title}</h2>
+            <p className="feature-tagline">{featured.tagline}</p>
+            <div className="feature-actions">
+              <button
+                type="button"
+                className="btn primary"
+                onClick={() =>
+                  featured.delivery === "web" ? onWeb(featured) : onPrimary(featured)
+                }
+              >
+                {primaryLabel(featured)}
+              </button>
+              <button type="button" className="btn ghost" onClick={() => onSelect(featured)}>
+                Details
+              </button>
+            </div>
+          </div>
+        </article>
+      ) : null}
+
       <div className="view-tools">
         <label className="search">
           <span className="sr-only">Search library</span>

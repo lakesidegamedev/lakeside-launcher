@@ -27,7 +27,11 @@ export function GameCard({
       onClick={onSelect}
     >
       <div className="game-art">
-        <span className="game-mark">{product.mark}</span>
+        {product.art ? (
+          <img className="game-art-img" src={product.art} alt="" loading="lazy" />
+        ) : (
+          <span className="game-mark">{product.mark}</span>
+        )}
         <span className={owned ? "badge owned" : "badge"}>
           {product.status === "soon"
             ? "Coming soon"

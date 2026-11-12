@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import {
   CATALOG,
-  PRODUCTS_BY_ID,
   canLaunchDesktop,
   executableFor,
   libraryProducts,
@@ -287,8 +286,7 @@ export function App(): JSX.Element {
       ) : null}
 
       <footer className="status-line">
-        {CATALOG.length} products · {PRODUCTS_BY_ID.size} ids ·{" "}
-        {isDesktop() ? "desktop shell" : "browser preview"}
+        {CATALOG.length} products · {isDesktop() ? "desktop shell" : "browser preview"}
       </footer>
     </div>
   );

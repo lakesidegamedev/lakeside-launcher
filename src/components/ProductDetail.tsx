@@ -43,7 +43,11 @@ export function ProductDetail({
         onClick={(event) => event.stopPropagation()}
       >
         <header className="detail-hero">
-          <span className="detail-mark">{product.mark}</span>
+          {product.art ? (
+            <img className="detail-art" src={product.art} alt="" />
+          ) : (
+            <span className="detail-mark">{product.mark}</span>
+          )}
           <button type="button" className="detail-close" onClick={onClose} aria-label="Close">
             Close
           </button>
