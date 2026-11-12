@@ -823,9 +823,50 @@ fn platform_sign_out(app: AppHandle) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let headless_update = std::env::args().any(|argument| argument == "--headless-update");
+
+    let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_process::init());
+
+    if headless_update {
+        builder = builder.setup(|app| {
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                use tauri_plugin_updater::UpdaterExt;
+
+                let outcome = async {
+                    let updater = handle.updater()?;
+                    match updater.check().await? {
+                        Some(update) => {
+                            println!("update-available {}", update.version);
+                            update
+                                .download_and_install(
+                                    |chunk, total| match total {
+                                        Some(total) => println!("update-progress {chunk}/{total}"),
+                                        None => println!("update-progress {chunk}"),
+                                    },
+                                    || println!("update-download-finished"),
+                                )
+                                .await?;
+                            println!("update-installed {}", update.version);
+                        }
+                        None => println!("update-none"),
+                    }
+                    Ok::<(), Box<dyn std::error::Error>>(())
+                }
+                .await;
+
+                if let Err(error) = outcome {
+                    eprintln!("update-error {error}");
+                }
+                handle.exit(0);
+            });
+            Ok(())
+        });
+    }
+
+    builder
         .invoke_handler(tauri::generate_handler![
             launch_product,
             open_web_game,

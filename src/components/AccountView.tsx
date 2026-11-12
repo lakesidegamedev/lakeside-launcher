@@ -146,8 +146,8 @@ export function AccountView({
           <h2 className="section-title">Platform mode</h2>
           <p className="panel-copy">
             {mode === "demo"
-              ? "Demo mode: sessions and entitlements are simulated locally. Set VITE_PLATFORM_MODE=live to use the platform API once the launcher endpoints are deployed."
-              : "Live mode: identity and entitlements come from lakeside-auth and lakeside-accounts. If the platform is unreachable the launcher boots from its last known library."}
+              ? "Demo mode: sessions and entitlements are simulated locally. Desktop builds default to live; set VITE_PLATFORM_MODE=demo only for a demo build."
+              : "Live mode: identity comes from lakeside-auth and purchases from lakeside-accounts. If the platform is unreachable the launcher boots from its last known library."}
           </p>
         </article>
       </div>

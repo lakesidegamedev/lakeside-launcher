@@ -1,0 +1,54 @@
+name: update e2e
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    runs-on: windows-latest
+    steps:
+      - name: Install the previous launcher build silently
+        shell: pwsh
+        run: |
+          $ProgressPreference = 'SilentlyContinue'
+          $url = 'https://lakesidegames.net/download/launcher/Lakeside_0.3.1_x64-setup.exe'
+          $file = Join-Path $env:RUNNER_TEMP 'Lakeside-setup.exe'
+          Invoke-WebRequest -Uri $url -OutFile $file
+          Start-Process -FilePath $file -ArgumentList '/S' -Wait
+          Start-Sleep -Seconds 5
+
+          function Get-LauncherVersion {
+            (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue |
+              Where-Object { $_.DisplayName -eq 'Lakeside' } |
+              Select-Object -First 1).DisplayVersion
+          }
+
+          "installed=" + (Get-LauncherVersion)
+          if ((Get-LauncherVersion) -ne '0.3.1') { throw '0.3.1 did not install' }
+
+      - name: Run the headless updater
+        shell: pwsh
+        run: |
+          function Get-LauncherVersion {
+            (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue |
+              Where-Object { $_.DisplayName -eq 'Lakeside' } |
+              Select-Object -First 1).DisplayVersion
+          }
+
+          $exe = Join-Path $env:LOCALAPPDATA 'Lakeside\Lakeside.exe'
+          "exe=" + $exe + " exists=" + (Test-Path $exe)
+          Start-Process -FilePath $exe -ArgumentList '--headless-update' -Wait
+
+          for ($i = 0; $i -lt 90; $i++) {
+            $version = Get-LauncherVersion
+            "poll $i version=$version"
+            if ($version -eq '0.3.2') { break }
+            Start-Sleep -Seconds 2
+          }
+
+          $final = Get-LauncherVersion
+          "updated=" + $final
+          if ($final -ne '0.3.2') { throw "expected 0.3.2, got $final" }
