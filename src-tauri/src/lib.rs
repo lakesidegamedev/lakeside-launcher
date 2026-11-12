@@ -327,12 +327,15 @@ fn open_external(url: String) -> Result<(), String> {
 }
 
 /// Start a loopback listener for the browser handoff, then return the URL the
-/// caller should hand to lakeside-auth. The one-time code is emitted as the
-/// `sign-in-code` event after the `state` nonce matches.
+/// caller should hand to lakeside-auth. The port range is narrow so the broker
+/// can allow exactly these ports and no others.
 #[tauri::command]
 fn begin_sign_in(app: AppHandle) -> Result<SignInStart, String> {
-    let listener = TcpListener::bind("127.0.0.1:0")
-        .map_err(|error| format!("Could not start the sign-in listener: {error}"))?;
+    let listener = (47832u16..=47841)
+        .find_map(|port| TcpListener::bind(("127.0.0.1", port)).ok())
+        .ok_or_else(|| {
+            "No launcher sign-in port is available (tried 47832-47841).".to_string()
+        })?;
     listener
         .set_nonblocking(true)
         .map_err(|error| format!("Could not configure the sign-in listener: {error}"))?;
