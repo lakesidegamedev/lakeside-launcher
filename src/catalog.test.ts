@@ -66,7 +66,7 @@ describe("ownership", () => {
     const ids = libraryProducts(owned).map((product) => product.id);
     expect(ids).toContain("ahd");
     expect(ids).toContain("electioneer");
-    expect(ids).not.toContain("grand-century");
+    expect(ids).toContain("grand-century");
   });
 
   it("lists unowned priced products in the store", () => {
@@ -76,9 +76,9 @@ describe("ownership", () => {
     expect(ids).not.toContain("electioneer");
   });
 
-  it("previews unreleased products in the store, never the library", () => {
-    expect(storeProducts(owned).map((product) => product.id)).toContain("grand-century");
-    expect(libraryProducts(owned).map((product) => product.id)).not.toContain("grand-century");
+  it("lists the free browser game in the library, not the store", () => {
+    expect(libraryProducts(owned).map((product) => product.id)).toContain("grand-century");
+    expect(storeProducts(owned).map((product) => product.id)).not.toContain("grand-century");
   });
 });
 
