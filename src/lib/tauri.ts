@@ -80,6 +80,16 @@ export interface InstallResult {
   executable: string;
 }
 
+export interface InstalledProduct {
+  version: string;
+  executable: string;
+  installedAt: number;
+}
+
+export async function installedProducts(): Promise<Record<string, InstalledProduct>> {
+  return invoke<Record<string, InstalledProduct>>("installed_products");
+}
+
 export interface InstallRequest {
   productId: string;
   version: string;

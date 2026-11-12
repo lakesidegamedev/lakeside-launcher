@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::path::{Component, Path, PathBuf};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use base64::Engine as _;
 use ed25519_dalek::{Signature, VerifyingKey};
@@ -52,6 +52,104 @@ struct InstallProgress {
 pub struct InstallResult {
     pub version: String,
     pub executable: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstalledProduct {
+    pub version: String,
+    pub executable: String,
+    #[serde(default)]
+    pub installed_at: u64,
+}
+
+type InstallState = HashMap<String, InstalledProduct>;
+
+fn now_millis() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+fn install_state_path(app: &AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_config_dir()
+        .map(|directory| directory.join("installs.json"))
+        .map_err(|error| format!("Could not resolve the app config directory: {error}"))
+}
+
+fn read_install_state(app: &AppHandle) -> InstallState {
+    let Ok(path) = install_state_path(app) else {
+        return InstallState::new();
+    };
+    match std::fs::read(&path) {
+        Ok(bytes) => serde_json::from_slice(&bytes).unwrap_or_default(),
+        Err(_) => InstallState::new(),
+    }
+}
+
+fn write_install_state(app: &AppHandle, state: &InstallState) -> Result<(), String> {
+    let path = install_state_path(app)?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|error| format!("Could not create the install state directory: {error}"))?;
+    }
+    let body = serde_json::to_vec(state)
+        .map_err(|error| format!("Could not encode the install state: {error}"))?;
+    let temporary = path.with_extension("json.tmp");
+    std::fs::write(&temporary, body)
+        .map_err(|error| format!("Could not write the install state: {error}"))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&temporary, std::fs::Permissions::from_mode(0o600));
+    }
+    std::fs::rename(&temporary, &path)
+        .map_err(|error| format!("Could not finalize the install state: {error}"))
+}
+
+fn record_install(
+    app: &AppHandle,
+    product_id: &str,
+    version: &str,
+    executable: &str,
+) -> Result<(), String> {
+    let mut state = read_install_state(app);
+    state.insert(
+        product_id.to_string(),
+        InstalledProduct {
+            version: version.to_string(),
+            executable: executable.to_string(),
+            installed_at: now_millis(),
+        },
+    );
+    write_install_state(app, &state)
+}
+
+/// Read the installed version from the per-user uninstall registry entry that
+/// the Tauri NSIS installer writes.
+#[cfg(target_os = "windows")]
+pub fn windows_installed_version(display_name: &str) -> Option<String> {
+    use winreg::enums::{HKEY_CURRENT_USER, KEY_READ};
+    use winreg::RegKey;
+
+    let uninstall = RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey_with_flags(r"Software\Microsoft\Windows\CurrentVersion\Uninstall", KEY_READ)
+        .ok()?;
+
+    for name in uninstall.enum_keys().flatten() {
+        let Ok(key) = uninstall.open_subkey_with_flags(&name, KEY_READ) else {
+            continue;
+        };
+        let display: String = key.get_value("DisplayName").unwrap_or_default();
+        if display == display_name {
+            if let Ok(version) = key.get_value::<String, _>("DisplayVersion") {
+                return Some(version);
+            }
+        }
+    }
+    None
 }
 
 #[cfg(target_os = "windows")]
@@ -603,6 +701,40 @@ where
 }
 
 #[tauri::command]
+fn installed_products(app: AppHandle) -> HashMap<String, InstalledProduct> {
+    let root = install_root(&app);
+    let mut state = read_install_state(&app);
+    state.retain(|_, entry| safe_join(&root, &entry.executable).is_ok());
+
+    #[cfg(target_os = "windows")]
+    {
+        for product_id in ["ahd"] {
+            if state.contains_key(product_id) {
+                continue;
+            }
+            let Some(executable) = installed_executable(product_id) else {
+                continue;
+            };
+            if safe_join(&root, executable).is_err() {
+                continue;
+            }
+            if let Some(version) = windows_installed_version("AHDClient") {
+                state.insert(
+                    product_id.to_string(),
+                    InstalledProduct {
+                        version,
+                        executable: executable.to_string(),
+                        installed_at: 0,
+                    },
+                );
+            }
+        }
+    }
+
+    state
+}
+
+#[tauri::command]
 async fn install_release(
     app: AppHandle,
     product_id: String,
@@ -612,8 +744,9 @@ async fn install_release(
     file_name: String,
     kind: String,
 ) -> Result<InstallResult, String> {
+    let progress_app = app.clone();
     let progress_product = product_id.clone();
-    install_artifact(
+    let result = install_artifact(
         install_root(&app),
         &product_id,
         &version,
@@ -622,7 +755,7 @@ async fn install_release(
         &file_name,
         &kind,
         move |downloaded, total| {
-            let _ = app.emit(
+            let _ = progress_app.emit(
                 "install-progress",
                 InstallProgress {
                     product_id: progress_product.clone(),
@@ -632,7 +765,10 @@ async fn install_release(
             );
         },
     )
-    .await
+    .await?;
+
+    let _ = record_install(&app, &product_id, &result.version, &result.executable);
+    Ok(result)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -875,6 +1011,7 @@ pub fn run() {
             get_release_manifest,
             is_installed,
             install_release,
+            installed_products,
             platform_session,
             platform_exchange,
             platform_entitlements,

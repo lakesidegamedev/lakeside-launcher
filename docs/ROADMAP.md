@@ -34,8 +34,9 @@ signed manifest, and signs in to the live Lakeside account services.
 3. **In-launcher checkout.** Checkout opens the existing account page in the
    browser. An embedded, zero-capability checkout window is possible but not
    required for correctness.
-4. **Game updates without reinstall.** The detail sheet offers Update, which
-   runs the vendor installer again. Delta updates and rollback are not built.
+4. **Game rollback and delta updates.** Versions are detected and updates only
+   appear when the manifest is newer. Keeping a previous installer for rollback
+   and shipping deltas are not built.
 5. **macOS and Linux installs.** Automatic install is Windows-only; those
    builds launch from `LAKESIDE_INSTALL_ROOT` but are installed manually.
 6. **Cloud saves, friends and presence.** AHDClient saves are versioned JSON

@@ -71,4 +71,9 @@ fn main() {
         result.version,
         executable.display()
     );
+
+    let detected = lakeside_launcher_lib::windows_installed_version("AHDClient")
+        .expect("AHDClient should have an uninstall registry entry");
+    println!("registry version {detected}");
+    assert_eq!(detected, result.version, "registry version must match the manifest");
 }

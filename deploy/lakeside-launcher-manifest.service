@@ -1,0 +1,9 @@
+[Unit]
+Description=Lakeside launcher release manifest
+Documentation=https://github.com/lakesidegamedev/lakeside-launcher
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/root/projects/lakeside-launcher/scripts/refresh-manifest.sh

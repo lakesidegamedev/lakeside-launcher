@@ -19,9 +19,10 @@ import {
   openWebGame,
   getReleaseManifest,
   installRelease,
-  isInstalled,
+  installedProducts,
   onInstallProgress,
   type InstallProgress,
+  type InstalledProduct,
   type ReleaseArtifact,
   type ReleaseProduct,
 } from "./lib/tauri";
@@ -31,6 +32,7 @@ import { StoreView } from "./components/StoreView";
 import { AccountView } from "./components/AccountView";
 import { ProductDetail } from "./components/ProductDetail";
 import { checkForUpdate, installUpdate, type UpdateInfo } from "./lib/updater";
+import { isNewerVersion } from "./lib/version";
 
 export type View = "library" | "store" | "account";
 
@@ -66,7 +68,7 @@ export function App(): JSX.Element {
   const [updateProgress, setUpdateProgress] = useState<number | null>(null);
   const [updating, setUpdating] = useState(false);
   const [releases, setReleases] = useState<Record<string, ReleaseProduct>>({});
-  const [installed, setInstalled] = useState<Record<string, boolean>>({});
+  const [installed, setInstalled] = useState<Record<string, InstalledProduct>>({});
   const [installing, setInstalling] = useState<string | null>(null);
   const [installFraction, setInstallFraction] = useState<number | null>(null);
 
@@ -126,16 +128,13 @@ export function App(): JSX.Element {
   useEffect(() => {
     if (!isDesktop()) return;
     let cancelled = false;
-    const platform = detectPlatform();
-    void Promise.all(
-      CATALOG.filter((product) => product.delivery === "native").map(async (product) => {
-        const executable = executableFor(product, platform);
-        if (!executable) return [product.id, false] as const;
-        return [product.id, await isInstalled(executable)] as const;
-      }),
-    ).then((entries) => {
-      if (!cancelled) setInstalled(Object.fromEntries(entries));
-    });
+    void installedProducts()
+      .then((next) => {
+        if (!cancelled) setInstalled(next);
+      })
+      .catch(() => {
+        // Installed games simply show as not installed.
+      });
     return () => {
       cancelled = true;
     };
@@ -242,6 +241,16 @@ export function App(): JSX.Element {
     return artifact?.kind === "nsis" && !!artifact.sha256;
   }
 
+  function latestVersion(product: Product): string | null {
+    return releases[product.id]?.version ?? null;
+  }
+
+  function hasUpdate(product: Product): boolean {
+    const latest = latestVersion(product);
+    const current = installed[product.id]?.version ?? null;
+    return !!latest && isNewerVersion(latest, current);
+  }
+
   async function handleInstall(product: Product): Promise<void> {
     const release = releases[product.id];
     const artifact = artifactFor(product);
@@ -261,7 +270,14 @@ export function App(): JSX.Element {
         fileName: artifact.name,
         kind: artifact.kind,
       });
-      setInstalled((previous) => ({ ...previous, [product.id]: true }));
+      setInstalled((previous) => ({
+        ...previous,
+        [product.id]: {
+          version: result.version,
+          executable: result.executable,
+          installedAt: Date.now(),
+        },
+      }));
       setNotice(`Installed ${product.title} ${result.version}.`);
     } catch (error) {
       setNotice(message(error));
@@ -327,6 +343,8 @@ export function App(): JSX.Element {
       if (canLaunchDesktop(product, entitlements)) {
         if (!installed[product.id] && canInstall(product)) {
           void handleInstall(product);
+        } else if (installed[product.id] && hasUpdate(product) && canInstall(product)) {
+          void handleInstall(product);
         } else {
           void handleLaunch(product);
         }
@@ -347,8 +365,11 @@ export function App(): JSX.Element {
           ? "Installing..."
           : `Installing ${Math.round(installFraction * 100)}%`;
       }
-      if (!installed[product.id] && canInstall(product)) {
-        const version = releases[product.id]?.version;
+      if (installed[product.id]) {
+        return hasUpdate(product) ? `Update to ${latestVersion(product)}` : "Launch desktop";
+      }
+      if (canInstall(product)) {
+        const version = latestVersion(product);
         return version ? `Install ${version}` : "Install";
       }
       return "Launch desktop";
@@ -461,7 +482,8 @@ export function App(): JSX.Element {
           product={selected}
           entitlements={entitlements}
           release={releases[selected.id] ?? null}
-          installed={!!installed[selected.id]}
+          installedVersion={installed[selected.id]?.version ?? null}
+          updateAvailable={hasUpdate(selected)}
           installing={installing === selected.id}
           installFraction={installFraction}
           canInstall={canInstall(selected)}

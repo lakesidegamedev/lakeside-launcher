@@ -142,13 +142,22 @@ Version 0.1.0 predates the updater. 0.2.x and 0.3.x update in place; users on
 ## Installing a game
 
 The launcher reads the signed manifest at
-`https://lakesidegames.net/download/launcher/manifest.json`. When a native game
-is owned and not installed, its detail sheet offers **Install**:
+`https://lakesidegames.net/download/launcher/manifest.json`. The manifest is
+regenerated every ten minutes by `lakeside-launcher-manifest.timer`, so a new
+game release appears without shipping a launcher update. When a native game is
+owned and not installed, its detail sheet offers **Install**:
 
 1. Download the artifact from the URL in the manifest.
 2. Verify its sha256 against the digest in the manifest.
 3. Run the NSIS installer silently.
-4. Confirm the expected executable exists under the install root, then launch.
+4. Confirm the expected executable exists under the install root, then record
+   the installed version.
+
+Installed versions are kept in `installs.json` under the app config directory,
+with the Windows uninstall registry as a fallback for games installed outside
+the launcher. The detail sheet offers **Update to x.y.z** only when the
+manifest version is newer than what is installed; otherwise it offers
+**Launch desktop** and a separate **Reinstall latest**.
 
 On Windows the install root is `%LOCALAPPDATA%`, because the Tauri installers
 install per-user. AHDClient lands at

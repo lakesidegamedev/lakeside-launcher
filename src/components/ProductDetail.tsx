@@ -11,7 +11,8 @@ interface Props {
   product: Product;
   entitlements: Entitlements;
   release: ReleaseProduct | null;
-  installed: boolean;
+  installedVersion: string | null;
+  updateAvailable: boolean;
   installing: boolean;
   installFraction: number | null;
   canInstall: boolean;
@@ -27,7 +28,8 @@ export function ProductDetail({
   product,
   entitlements,
   release,
-  installed,
+  installedVersion,
+  updateAvailable,
   installing,
   installFraction,
   canInstall,
@@ -106,8 +108,8 @@ export function ProductDetail({
             <div>
               <dt>Status</dt>
               <dd>
-                {installed
-                  ? "Installed"
+                {installedVersion
+                  ? `Installed ${installedVersion}`
                   : owned
                     ? "In your library"
                     : soon
@@ -128,7 +130,7 @@ export function ProductDetail({
               </button>
             ) : launchable ? (
               <>
-                {!installed && canInstall ? (
+                {!installedVersion && canInstall ? (
                   <button
                     type="button"
                     className="btn primary"
@@ -141,15 +143,10 @@ export function ProductDetail({
                         : `Installing ${Math.round(installFraction * 100)}%`
                       : `Install${release ? ` ${release.version}` : ""}`}
                   </button>
-                ) : (
-                  <button type="button" className="btn primary" onClick={onLaunch} disabled={busy}>
-                    {busy ? "Opening..." : "Launch desktop"}
-                  </button>
-                )}
-                {installed && canInstall ? (
+                ) : installedVersion && updateAvailable && canInstall ? (
                   <button
                     type="button"
-                    className="btn ghost"
+                    className="btn primary"
                     onClick={onInstall}
                     disabled={installing}
                   >
@@ -159,10 +156,29 @@ export function ProductDetail({
                         : `Installing ${Math.round(installFraction * 100)}%`
                       : `Update to ${release?.version ?? "latest"}`}
                   </button>
+                ) : (
+                  <button type="button" className="btn primary" onClick={onLaunch} disabled={busy}>
+                    {busy ? "Opening..." : "Launch desktop"}
+                  </button>
+                )}
+                {installedVersion && updateAvailable ? (
+                  <button type="button" className="btn ghost" onClick={onLaunch} disabled={busy}>
+                    {busy ? "Opening..." : "Launch desktop"}
+                  </button>
                 ) : null}
                 {product.webUrl ? (
                   <button type="button" className="btn ghost" onClick={onWeb} disabled={installing}>
                     {product.webLabel ?? "Play online"}
+                  </button>
+                ) : null}
+                {installedVersion && !updateAvailable && canInstall ? (
+                  <button
+                    type="button"
+                    className="btn ghost"
+                    onClick={onInstall}
+                    disabled={installing}
+                  >
+                    {installing ? "Reinstalling..." : "Reinstall latest"}
                   </button>
                 ) : null}
               </>
