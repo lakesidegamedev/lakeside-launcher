@@ -37,7 +37,7 @@ fn main() {
         product.name, product.version, artifact.url
     );
 
-    let last_report = std::cell::Cell::new(0u64);
+    let last_report = std::sync::atomic::AtomicU64::new(0);
     let result = tauri::async_runtime::block_on(lakeside_launcher_lib::install_artifact(
         root.clone(),
         "ahd",
@@ -49,8 +49,9 @@ fn main() {
         |downloaded, total| {
             if let Some(total) = total {
                 let percent = downloaded.saturating_mul(100) / total.max(1);
-                if percent >= last_report.get() + 20 {
-                    last_report.set(percent);
+                let previous = last_report.load(std::sync::atomic::Ordering::Relaxed);
+                if percent >= previous + 20 {
+                    last_report.store(percent, std::sync::atomic::Ordering::Relaxed);
                     println!("download {percent}%");
                 }
             }
