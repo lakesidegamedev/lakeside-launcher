@@ -37,7 +37,7 @@ fn main() {
         product.name, product.version, artifact.url
     );
 
-    let mut last_report = 0u64;
+    let last_report = std::cell::Cell::new(0u64);
     let result = tauri::async_runtime::block_on(lakeside_launcher_lib::install_artifact(
         root.clone(),
         "ahd",
@@ -49,8 +49,8 @@ fn main() {
         |downloaded, total| {
             if let Some(total) = total {
                 let percent = downloaded.saturating_mul(100) / total.max(1);
-                if percent >= last_report + 20 {
-                    last_report = percent;
+                if percent >= last_report.get() + 20 {
+                    last_report.set(percent);
                     println!("download {percent}%");
                 }
             }
