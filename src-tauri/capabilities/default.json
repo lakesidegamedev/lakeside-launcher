@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Launcher chrome only. Game webviews are created without capabilities and cannot reach Tauri IPC.",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "updater:default", "process:default"]
 }

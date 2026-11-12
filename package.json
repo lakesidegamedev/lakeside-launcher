@@ -1,7 +1,7 @@
 {
   "name": "lakeside-launcher",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "The Lakeside Games launcher: library, store and account shell for web and native games",
   "license": "UNLICENSED",
   "type": "module",
@@ -11,6 +11,7 @@
     "preview": "vite preview",
     "test": "vitest run && node --test scripts/manifest.test.mjs",
     "manifest": "node scripts/manifest.mjs",
+    "publish:update": "node scripts/publish-update.mjs",
     "tauri": "tauri",
     "dev:desktop": "tauri dev",
     "build:desktop": "tauri build"
@@ -18,7 +19,9 @@
   "dependencies": {
     "@tauri-apps/api": "^2.1.1",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "@tauri-apps/plugin-updater": "^2.9.0",
+    "@tauri-apps/plugin-process": "^2.3.0"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.1.0",

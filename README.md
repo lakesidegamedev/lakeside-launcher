@@ -106,6 +106,40 @@ Artifact keys: `windows-x64`, `macos-arm64`, `macos-x64`, `linux-x64`,
 `linux-deb`, `android`. The pure transform lives in `buildManifest` and has
 fixture coverage in `scripts/manifest.test.mjs`.
 
+## Auto-update
+
+The app checks `https://lakesidegames.net/download/launcher/latest.json` on
+startup and offers **Update and restart** when a newer signed build exists. The
+Tauri updater verifies the minisign signature against the public key compiled
+into `tauri.conf.json` before running the NSIS installer in passive mode.
+
+Publishing a build:
+
+```sh
+# after a successful desktop-bundles run, download its artifacts
+gh run download <run-id> -R lakesidegamedev/lakeside-launcher \
+  -n lakeside-windows-x64 -D /tmp/lakeside-build
+
+npm run publish:update -- \
+  --version 0.2.0 \
+  --installer /tmp/lakeside-build/Lakeside_0.2.0_x64-setup.exe \
+  --signature /tmp/lakeside-build/Lakeside_0.2.0_x64-setup.exe.sig \
+  --notes "What changed"
+```
+
+That copies the installer and signature into
+`/var/www/lakeside-landing/download/launcher/` and rewrites `latest.json`
+atomically. Caddy serves the directory publicly, so no GitHub credentials are
+needed by players.
+
+The updater private key lives at `/root/.tauri/lakeside-launcher.key` with its
+password beside it, outside the repository. CI reads the key from the
+`TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` secrets.
+Losing either makes future updates impossible; back them up before rotating.
+
+Version 0.1.0 predates the updater, so 0.2.0 is the last manual install. Every
+build after that can update in place.
+
 ## CI and desktop builds
 
 - `.github/workflows/verify.yml` runs the frontend tests, web build, Rust check

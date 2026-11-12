@@ -279,6 +279,43 @@ button {
   color: #8fd2ac;
 }
 
+.update-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+  padding: 12px 14px 12px 16px;
+  border: 1px solid rgb(143 156 255 / 0.35);
+  border-radius: 12px;
+  background: linear-gradient(90deg, rgb(143 156 255 / 0.13), rgb(143 156 255 / 0.04));
+}
+
+.update-copy {
+  min-width: 0;
+}
+
+.update-copy strong {
+  display: block;
+  font-size: 13px;
+}
+
+.update-copy span {
+  display: block;
+  max-width: 560px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.update-actions {
+  display: flex;
+  flex: none;
+  gap: 8px;
+}
+
 .status-line {
   grid-column: 2;
   padding: 8px 44px 12px;
@@ -988,6 +1025,17 @@ button {
 
   .topbar h1 {
     font-size: 24px;
+  }
+
+  .update-bar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .update-copy span {
+    max-width: 100%;
+    white-space: normal;
   }
 
   .game-art {

@@ -23,6 +23,7 @@ import { LibraryView } from "./components/LibraryView";
 import { StoreView } from "./components/StoreView";
 import { AccountView } from "./components/AccountView";
 import { ProductDetail } from "./components/ProductDetail";
+import { checkForUpdate, installUpdate, type UpdateInfo } from "./lib/updater";
 
 export type View = "library" | "store" | "account";
 
@@ -54,6 +55,9 @@ export function App(): JSX.Element {
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [updateProgress, setUpdateProgress] = useState<number | null>(null);
+  const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -77,6 +81,21 @@ export function App(): JSX.Element {
     const timer = setTimeout(() => setNotice(null), 7000);
     return () => clearTimeout(timer);
   }, [notice]);
+
+  useEffect(() => {
+    if (!isDesktop()) return;
+    let cancelled = false;
+    void checkForUpdate()
+      .then((info) => {
+        if (!cancelled && info) setUpdateInfo(info);
+      })
+      .catch(() => {
+        // Offline or the feed is unreachable: stay quiet on startup.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const library = libraryProducts(entitlements);
   const store = storeProducts(entitlements);
@@ -126,6 +145,19 @@ export function App(): JSX.Element {
     setEntitlements({});
     setSelected(null);
     setNotice("Signed out.");
+  }
+
+  async function handleInstallUpdate(): Promise<void> {
+    setUpdating(true);
+    setUpdateProgress(null);
+    try {
+      await installUpdate(setUpdateProgress);
+      // relaunch() replaces the process; reaching here means it returned.
+      setUpdating(false);
+    } catch (error) {
+      setNotice(message(error));
+      setUpdating(false);
+    }
   }
 
   async function handleLaunch(product: Product): Promise<void> {
@@ -225,6 +257,37 @@ export function App(): JSX.Element {
             {client.mode === "demo" ? "Demo library" : "Live account"}
           </span>
         </header>
+
+        {updateInfo ? (
+          <div className="update-bar" role="status">
+            <div className="update-copy">
+              <strong>Lakeside {updateInfo.version} is available</strong>
+              <span>{updateInfo.notes || "A new launcher build is ready to install."}</span>
+            </div>
+            <div className="update-actions">
+              <button
+                type="button"
+                className="btn small primary"
+                onClick={() => void handleInstallUpdate()}
+                disabled={updating}
+              >
+                {updating
+                  ? updateProgress === null
+                    ? "Downloading..."
+                    : `Installing ${Math.round(updateProgress * 100)}%`
+                  : "Update and restart"}
+              </button>
+              <button
+                type="button"
+                className="btn small ghost"
+                onClick={() => setUpdateInfo(null)}
+                disabled={updating}
+              >
+                Later
+              </button>
+            </div>
+          </div>
+        ) : null}
 
         {!ready ? (
           <div className="loading">Loading your library...</div>
