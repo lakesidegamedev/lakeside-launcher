@@ -42,10 +42,11 @@ fn main() {
         root.clone(),
         "ahd",
         &product.version,
-        &artifact.url,
+        lakeside_launcher_lib::DownloadSource::Url(artifact.url.clone()),
         artifact.sha256.as_deref().unwrap_or(""),
         &artifact.name,
         &artifact.kind,
+        None,
         |downloaded, total| {
             if let Some(total) = total {
                 let percent = downloaded.saturating_mul(100) / total.max(1);

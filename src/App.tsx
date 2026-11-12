@@ -3,6 +3,7 @@ import {
   CATALOG,
   canLaunchDesktop,
   executableFor,
+  installerSupported,
   libraryProducts,
   storeProducts,
   type Entitlements,
@@ -26,6 +27,7 @@ import {
   type ReleaseArtifact,
   type ReleaseProduct,
 } from "./lib/tauri";
+import type { ChipTone } from "./components/GameCard";
 import { Sidebar } from "./components/Sidebar";
 import { LibraryView } from "./components/LibraryView";
 import { StoreView } from "./components/StoreView";
@@ -39,7 +41,7 @@ export type View = "library" | "store" | "account";
 const VIEW_COPY: Record<View, { title: string; subtitle: string }> = {
   library: { title: "Library", subtitle: "Your games, ready when you are" },
   store: { title: "Store", subtitle: "Games and campaign packs for your account" },
-  account: { title: "Account", subtitle: "Session, purchases and devices" },
+  account: { title: "Settings", subtitle: "Session, purchases and devices" },
 };
 
 function message(error: unknown): string {
@@ -238,7 +240,8 @@ export function App(): JSX.Element {
   function canInstall(product: Product): boolean {
     if (!isDesktop() || product.delivery !== "native") return false;
     const artifact = artifactFor(product);
-    return artifact?.kind === "nsis" && !!artifact.sha256;
+    if (!artifact?.sha256) return false;
+    return installerSupported(artifact.kind, detectPlatform());
   }
 
   function latestVersion(product: Product): string | null {
@@ -269,6 +272,7 @@ export function App(): JSX.Element {
         sha256: artifact.sha256,
         fileName: artifact.name,
         kind: artifact.kind,
+        commercialId: product.authenticatedDownload ? (product.productId ?? undefined) : undefined,
       });
       setInstalled((previous) => ({
         ...previous,
@@ -287,7 +291,8 @@ export function App(): JSX.Element {
     }
   }
 
-  async function handleLaunch(product: Product): Promise<void> {    const platform = detectPlatform();
+  async function handleLaunch(product: Product): Promise<void> {
+    const platform = detectPlatform();
     const executable = executableFor(product, platform);
     if (!executable) {
       setNotice(`No ${platform} build is configured for ${product.title}.`);
@@ -299,7 +304,7 @@ export function App(): JSX.Element {
     }
     setBusy(product.id);
     try {
-      await launchProduct(product.id, executable);
+      await launchProduct(product.id, executable, product.handoffClientId);
       setNotice(`Launched ${product.title}.`);
     } catch (error) {
       setNotice(message(error));
@@ -379,10 +384,26 @@ export function App(): JSX.Element {
     return "Unavailable";
   }
 
+  function chipFor(product: Product): { label: string; tone: ChipTone } {
+    if (product.status === "soon") return { label: "Coming soon", tone: "muted" };
+    if (product.delivery === "web") return { label: "Web", tone: "info" };
+    const version = installed[product.id]?.version;
+    if (version) {
+      return hasUpdate(product)
+        ? { label: "Update available", tone: "warn" }
+        : { label: `Installed ${version}`, tone: "ok" };
+    }
+    if (canLaunchDesktop(product, entitlements) && canInstall(product)) {
+      return { label: "Not installed", tone: "muted" };
+    }
+    if (product.webUrl) return { label: "Web", tone: "info" };
+    return { label: "Not installed", tone: "muted" };
+  }
+
   const copy = VIEW_COPY[view];
 
   return (
-    <div className="app-shell">
+    <div className={selected && view !== "account" ? "app-shell has-detail" : "app-shell"}>
       <Sidebar
         view={view}
         onView={setView}
@@ -395,10 +416,8 @@ export function App(): JSX.Element {
 
       <main className="main">
         <header className="topbar">
-          <div>
-            <h1>{copy.title}</h1>
-            <p>{copy.subtitle}</p>
-          </div>
+          <h1>{copy.title}</h1>
+          <p>{copy.subtitle}</p>
           <span className={`mode-pill ${client.mode}`}>
             {client.mode === "demo" ? "Demo library" : "Live account"}
           </span>
@@ -446,6 +465,8 @@ export function App(): JSX.Element {
             onPrimary={handlePrimary}
             onWeb={(product) => void handleWeb(product)}
             primaryLabel={primaryLabel}
+            chipFor={chipFor}
+            selectedId={selected?.id ?? null}
             signedIn={session !== null}
             onSignIn={() => void handleSignIn()}
             onBrowseStore={() => setView("store")}
@@ -454,6 +475,7 @@ export function App(): JSX.Element {
           <StoreView
             products={store}
             entitlements={entitlements}
+            selectedId={selected?.id ?? null}
             onSelect={setSelected}
             onBuy={handleBuy}
             signedIn={session !== null}
@@ -477,7 +499,7 @@ export function App(): JSX.Element {
         )}
       </main>
 
-      {selected ? (
+      {selected && view !== "account" ? (
         <ProductDetail
           product={selected}
           entitlements={entitlements}

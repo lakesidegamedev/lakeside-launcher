@@ -45,18 +45,8 @@ export function ProductDetail({
   const soon = product.status === "soon";
 
   return (
-    <div
-      className="detail-backdrop"
-      role="dialog"
-      aria-modal="true"
-      aria-label={product.title}
-      onClick={onClose}
-    >
-      <article
-        className="detail"
-        style={{ ["--card-accent" as string]: product.accent }}
-        onClick={(event) => event.stopPropagation()}
-      >
+    <aside className="detail" aria-label={product.title}>
+      <article className="detail-inner">
         <header className="detail-hero">
           {product.art ? (
             <img className="detail-art" src={product.art} alt="" />
@@ -69,7 +59,6 @@ export function ProductDetail({
         </header>
 
         <div className="detail-body">
-          <p className="eyebrow">{product.game}</p>
           <h2>{product.title}</h2>
           <p className="detail-tagline">{product.tagline}</p>
           <p className="detail-description">{product.description}</p>
@@ -217,6 +206,6 @@ export function ProductDetail({
           ) : null}
         </div>
       </article>
-    </div>
+    </aside>
   );
 }

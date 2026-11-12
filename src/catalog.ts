@@ -7,10 +7,10 @@
 // for access. Keep ids in sync with products.js until the manifest service
 // becomes the single source.
 
-import ahdArt from "./assets/media/ahd.webp";
-import corporateWarfareArt from "./assets/media/corporate-warfare.webp";
-import grandCenturyArt from "./assets/media/grand-century.webp";
-import marginOfVictoryArt from "./assets/media/margin-of-victory.webp";
+import ahdArt from "./assets/media/ahd-map.webp";
+import corporateWarfareArt from "./assets/media/cw-goods.jpg";
+import grandCenturyArt from "./assets/media/gc-world.webp";
+import marginOfVictoryArt from "./assets/media/mov-night.jpg";
 
 export type Delivery = "native" | "web" | "content";
 export type ProductStatus = "available" | "soon";
@@ -39,6 +39,16 @@ export interface Product {
   webLabel: string | null;
   /** Relative paths from the install root, one per supported platform. */
   executables: ExecutableMap | null;
+  /**
+   * Fetch the installer through the accounts download endpoint with the stored
+   * session (paid builds) instead of the public manifest URL.
+   */
+  authenticatedDownload?: boolean;
+  /**
+   * Opt in to the launcher handoff: the game starts with LAKESIDE_LAUNCHER env
+   * and, when signed in, a single-use code bound to this client id.
+   */
+  handoffClientId?: string;
   accent: string;
   mark: string;
   /** Card art, 16:9. Null falls back to the accent and mark. */
@@ -99,19 +109,21 @@ export const CATALOG: readonly Product[] = [
     title: "Corporate Warfare",
     tagline: "Own the economy instead of the country",
     description:
-      "A corporate strategy simulation. Free to download for Windows and Linux, with the source published on GitHub.",
+      "A corporate strategy simulation for Windows and Linux, with the source published on GitHub.",
     delivery: "native",
     status: "available",
     platforms: ["windows", "linux"],
     priceCents: null,
     currency: "usd",
-    productId: null,
+    productId: "corporate-warfare",
     webUrl: null,
     webLabel: null,
     executables: {
-      windows: "CorporateWarfare/CorporateWarfare.exe",
-      linux: "CorporateWarfare/corporate-warfare",
+      windows: "Programs/Corporate Warfare/Corporate Warfare.exe",
+      linux: "CorporateWarfare/CorporateWarfare.AppImage",
     },
+    authenticatedDownload: true,
+    handoffClientId: "corporate-warfare-desktop",
     accent: "#7a6a3a",
     mark: "CW",
     art: corporateWarfareArt,
@@ -237,6 +249,13 @@ export function ownsProduct(product: Product, entitlements: Entitlements): boole
 /** Whether the desktop binary may launch. The online companion stays free. */
 export function canLaunchDesktop(product: Product, entitlements: Entitlements): boolean {
   return product.delivery === "native" && ownsProduct(product, entitlements);
+}
+
+/** Installer kinds the launcher can run, per platform. Dmg is out of scope. */
+export function installerSupported(kind: string, platform: Platform): boolean {
+  if (platform === "windows") return kind === "nsis" || kind === "inno";
+  if (platform === "linux") return kind === "appimage";
+  return false;
 }
 
 export function executableFor(product: Product, platform: Platform): string | null {
