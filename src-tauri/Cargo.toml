@@ -24,3 +24,7 @@ rand = "0.8"
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]
+
+[dev-dependencies]
+minisign-verify = "0.3"
+base64 = "0.22"

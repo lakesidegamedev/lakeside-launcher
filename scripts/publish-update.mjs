@@ -18,7 +18,6 @@
 
 import { copyFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { tmpdir } from "node:os";
 
 const DEFAULTS = {
   out: "/var/www/lakeside-landing/download/launcher",
@@ -55,7 +54,12 @@ async function main() {
   validate(options);
 
   const signature = (await readFile(options.signature, "utf8")).trim();
-  if (!signature.startsWith("untrusted comment:")) {
+  // Tauri emits the signature as a base64 minisign document; accept either the
+  // encoded form or a plain-text minisign file.
+  const decoded = signature.startsWith("untrusted comment:")
+    ? signature
+    : Buffer.from(signature, "base64").toString("utf8");
+  if (!decoded.startsWith("untrusted comment:")) {
     throw new Error("signature file does not look like a minisign signature");
   }
 
@@ -79,7 +83,9 @@ async function main() {
   };
 
   const feedPath = join(options.out, "latest.json");
-  const tempPath = join(tmpdir(), `lakeside-latest-${process.pid}.json`);
+  // Keep the temp file on the same filesystem as the feed; /tmp is often a
+  // different mount, and rename() refuses to cross devices.
+  const tempPath = join(options.out, `.latest-${process.pid}.json`);
   await writeFile(tempPath, `${JSON.stringify(feed, null, 2)}\n`);
   await rename(tempPath, feedPath);
 
