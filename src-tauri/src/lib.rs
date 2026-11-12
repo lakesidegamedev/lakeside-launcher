@@ -39,7 +39,6 @@ const GAME_HOSTS: &[&str] = &["lakesidegames.net", "ahousedividedgame.com"];
 #[cfg(target_os = "windows")]
 const DOWNLOAD_HOSTS: &[&str] = &["github.com", "githubusercontent.com", "lakesidegames.net"];
 
-#[cfg(target_os = "windows")]
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct InstallProgress {
@@ -50,9 +49,9 @@ struct InstallProgress {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct InstallResult {
-    version: String,
-    executable: String,
+pub struct InstallResult {
+    pub version: String,
+    pub executable: String,
 }
 
 #[cfg(target_os = "windows")]
@@ -435,8 +434,7 @@ fn verify_manifest_signature(payload: &[u8], signature_b64: &str) -> Result<(), 
 /// Fetch the published release manifest and verify its detached signature
 /// before parsing. The signature covers the exact bytes on the wire, so the
 /// file can be served by any static host.
-#[tauri::command]
-async fn get_release_manifest() -> Result<ReleaseManifest, String> {
+pub async fn load_release_manifest() -> Result<ReleaseManifest, String> {
     let client = reqwest::Client::builder()
         .user_agent("lakeside-launcher")
         .timeout(Duration::from_secs(20))
@@ -472,22 +470,30 @@ async fn get_release_manifest() -> Result<ReleaseManifest, String> {
 }
 
 #[tauri::command]
+async fn get_release_manifest() -> Result<ReleaseManifest, String> {
+    load_release_manifest().await
+}
+
+#[tauri::command]
 fn is_installed(app: AppHandle, executable: String) -> bool {
     safe_join(&install_root(&app), &executable).is_ok()
 }
 
-/// Download a signed-manifest artifact, verify its sha256, run the NSIS
-/// installer silently and confirm the expected executable appeared.
-#[tauri::command]
-async fn install_release(
-    app: AppHandle,
-    product_id: String,
-    version: String,
-    url: String,
-    sha256: String,
-    file_name: String,
-    kind: String,
-) -> Result<InstallResult, String> {
+/// Core installer, separated from the Tauri command so the Windows CI probe
+/// exercises the same download, hash, install and path-check path.
+pub async fn install_artifact<F>(
+    install_root: PathBuf,
+    product_id: &str,
+    version: &str,
+    url: &str,
+    sha256: &str,
+    file_name: &str,
+    kind: &str,
+    on_progress: F,
+) -> Result<InstallResult, String>
+where
+    F: Fn(u64, Option<u64>) + Send,
+{
     if product_id.is_empty()
         || product_id.len() > 64
         || !product_id
@@ -504,14 +510,14 @@ async fn install_release(
 
     #[cfg(not(target_os = "windows"))]
     {
-        let _ = (&app, &version, &url, &sha256, &file_name);
+        let _ = (&install_root, version, url, sha256, file_name, &on_progress);
         return Err("Automatic game installation is currently Windows-only. Download the installer from the game's release page.".to_string());
     }
 
     #[cfg(target_os = "windows")]
     {
-        let parsed = validate_url(&url, DOWNLOAD_HOSTS)?;
-        let safe_name = Path::new(&file_name)
+        let parsed = validate_url(url, DOWNLOAD_HOSTS)?;
+        let safe_name = Path::new(file_name)
             .file_name()
             .and_then(|name| name.to_str())
             .filter(|name| !name.is_empty() && name.len() <= 200)
@@ -556,14 +562,7 @@ async fn install_release(
                 .map_err(|error| format!("Could not write the download: {error}"))?;
             hasher.update(&chunk);
             downloaded += chunk.len() as u64;
-            let _ = app.emit(
-                "install-progress",
-                InstallProgress {
-                    product_id: product_id.clone(),
-                    downloaded,
-                    total,
-                },
-            );
+            on_progress(downloaded, total);
         }
         file.flush()
             .await
@@ -586,18 +585,51 @@ async fn install_release(
             return Err("The installer reported a failure.".to_string());
         }
 
-        let executable = installed_executable(&product_id).ok_or_else(|| {
+        let executable = installed_executable(product_id).ok_or_else(|| {
             "Automatic installation is not configured for this product.".to_string()
         })?;
-        safe_join(&install_root(&app), executable).map_err(|_| {
+        safe_join(&install_root, executable).map_err(|_| {
             "The installer finished but the game executable was not found.".to_string()
         })?;
 
         Ok(InstallResult {
-            version,
+            version: version.to_string(),
             executable: executable.to_string(),
         })
     }
+}
+
+#[tauri::command]
+async fn install_release(
+    app: AppHandle,
+    product_id: String,
+    version: String,
+    url: String,
+    sha256: String,
+    file_name: String,
+    kind: String,
+) -> Result<InstallResult, String> {
+    let progress_product = product_id.clone();
+    install_artifact(
+        install_root(&app),
+        &product_id,
+        &version,
+        &url,
+        &sha256,
+        &file_name,
+        &kind,
+        move |downloaded, total| {
+            let _ = app.emit(
+                "install-progress",
+                InstallProgress {
+                    product_id: progress_product.clone(),
+                    downloaded,
+                    total,
+                },
+            );
+        },
+    )
+    .await
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
