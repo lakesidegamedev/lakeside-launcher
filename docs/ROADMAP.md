@@ -1,7 +1,8 @@
 # Launcher roadmap
 
-Status after 0.3.2. The launcher now updates itself, installs AHDClient from a
-signed manifest, and signs in to the live Lakeside account services.
+Status after 0.4.0. The launcher now updates itself, installs and updates
+AHDClient from a signed manifest, and signs in to the live Lakeside account
+services.
 
 ## Shipped
 
@@ -13,12 +14,15 @@ signed manifest, and signs in to the live Lakeside account services.
 3. **Game install/update**: AHDClient downloads from the manifest, sha256 is
    checked against the digest, the NSIS installer runs silently, and the
    executable is verified under `%LOCALAPPDATA%\AHDClient`.
-4. **Live identity**: Discord sign-in through lakeside-auth, with a narrow
+4. **Version-aware game updates**: the manifest refreshes every ten minutes,
+   installed versions come from `installs.json` or the Windows uninstall
+   registry, and Update appears only when the manifest is newer.
+5. **Live identity**: Discord sign-in through lakeside-auth, with a narrow
    loopback allowance (`127.0.0.1:47832-47841/callback`).
-5. **Live entitlements**: lakeside-accounts issues a 30-day opaque portal
+6. **Live entitlements**: lakeside-accounts issues a 30-day opaque portal
    session and serves purchase entitlements as a Bearer API. The launcher keeps
    the token in Rust with 0600 permissions, never in the webview.
-6. **Library, store, account UI**, real game art, installation progress and
+7. **Library, store, account UI**, real game art, installation progress and
    one-click updates.
 
 ## Remaining

@@ -6,10 +6,10 @@ our web and native games.
 This is the live launcher: signed auto-update, live Lakeside identity and
 entitlements, and one-click AHDClient install/update on Windows.
 
-## Download (Windows, 0.3.2)
+## Download (Windows, 0.4.0)
 
-- Installer: [Lakeside_0.3.2_x64-setup.exe](https://github.com/lakesidegamedev/lakeside-launcher/releases/download/v0.3.2/Lakeside_0.3.2_x64-setup.exe)
-- Portable: [Lakeside.exe](https://github.com/lakesidegamedev/lakeside-launcher/releases/download/v0.3.2/Lakeside.exe)
+- Installer: [Lakeside_0.4.0_x64-setup.exe](https://github.com/lakesidegamedev/lakeside-launcher/releases/download/v0.4.0/Lakeside_0.4.0_x64-setup.exe)
+- Portable: [Lakeside.exe](https://github.com/lakesidegamedev/lakeside-launcher/releases/download/v0.4.0/Lakeside.exe)
 
 The build is currently unsigned, so SmartScreen warns once. The release
 workflow signs and timestamps both binaries automatically as soon as the
@@ -137,7 +137,7 @@ environment. CI reads it from the `TAURI_SIGNING_PRIVATE_KEY` and
 updates impossible; back them up before rotating.
 
 Version 0.1.0 predates the updater. 0.2.x and 0.3.x update in place; users on
-0.1.0 need one manual install of 0.3.2 or later.
+0.1.0 need one manual install of 0.4.0 or later.
 
 ## Installing a game
 
