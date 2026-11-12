@@ -5,7 +5,6 @@ import {
   canLaunchDesktop,
   executableFor,
   libraryProducts,
-  ownsProduct,
   storeProducts,
   type Entitlements,
   type Platform,

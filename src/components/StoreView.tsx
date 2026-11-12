@@ -41,7 +41,9 @@ function StoreRow({
         <strong>
           {product.priceCents === null ? "Free" : formatPrice(product.priceCents, product.currency)}
         </strong>
-        {owned ? (
+        {product.status === "soon" ? (
+          <span className="badge">Coming soon</span>
+        ) : owned ? (
           <span className="badge owned">Owned</span>
         ) : signedIn ? (
           <button

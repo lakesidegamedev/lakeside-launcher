@@ -75,6 +75,11 @@ describe("ownership", () => {
     expect(ids).toContain("us-historical");
     expect(ids).not.toContain("electioneer");
   });
+
+  it("previews unreleased products in the store, never the library", () => {
+    expect(storeProducts(owned).map((product) => product.id)).toContain("grand-century");
+    expect(libraryProducts(owned).map((product) => product.id)).not.toContain("grand-century");
+  });
 });
 
 describe("platform helpers", () => {

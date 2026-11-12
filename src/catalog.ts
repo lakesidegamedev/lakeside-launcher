@@ -236,16 +236,21 @@ export function formatPrice(cents: number, currency: string): string {
   }).format(cents / 100);
 }
 
-/** The store lists priced products the player does not own yet. */
+/** The store lists priced products the player does not own yet, plus previews. */
 export function storeProducts(entitlements: Entitlements): readonly Product[] {
   return CATALOG.filter(
-    (product) => product.priceCents !== null && !ownsProduct(product, entitlements),
+    (product) =>
+      product.status === "soon" ||
+      (product.priceCents !== null && !ownsProduct(product, entitlements)),
   );
 }
 
 /** Library lists everything owned, free, or bundled as content. */
 export function libraryProducts(entitlements: Entitlements): readonly Product[] {
   return CATALOG.filter(
-    (product) => product.delivery !== "content" && ownsProduct(product, entitlements),
+    (product) =>
+      product.status === "available" &&
+      product.delivery !== "content" &&
+      ownsProduct(product, entitlements),
   );
 }

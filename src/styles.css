@@ -339,6 +339,7 @@ button {
   color: var(--text);
   font-weight: 600;
   font-size: 13px;
+  white-space: nowrap;
   cursor: pointer;
   transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
 }
