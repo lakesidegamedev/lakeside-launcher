@@ -152,13 +152,22 @@ pub fn valid_id(value: &str) -> bool {
             .all(|character| character.is_ascii_alphanumeric() || character == '-')
 }
 
+/// Platform keys such as `windows-x86_64`.
+fn valid_platform_key(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 32
+        && value
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || character == '-' || character == '_')
+}
+
 /// `GET <base>/account/launcher/download/<productId>/<platform>`.
 pub fn account_download_url(
     base: &str,
     commercial_id: &str,
     platform: &str,
 ) -> Result<String, String> {
-    if !valid_id(commercial_id) || !valid_id(platform) {
+    if !valid_id(commercial_id) || !valid_platform_key(platform) {
         return Err("Invalid product or platform for the download.".to_string());
     }
     Ok(format!(
