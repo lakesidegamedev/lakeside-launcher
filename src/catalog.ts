@@ -7,10 +7,10 @@
 // for access. Keep ids in sync with products.js until the manifest service
 // becomes the single source.
 
-import ahdArt from "./assets/media/ahd.webp";
-import corporateWarfareArt from "./assets/media/corporate-warfare.webp";
-import grandCenturyArt from "./assets/media/grand-century.webp";
-import marginOfVictoryArt from "./assets/media/margin-of-victory.webp";
+import ahdArt from "./assets/media/ahd-map.webp";
+import corporateWarfareArt from "./assets/media/cw-goods.jpg";
+import grandCenturyArt from "./assets/media/gc-world.webp";
+import marginOfVictoryArt from "./assets/media/mov-night.jpg";
 
 export type Delivery = "native" | "web" | "content";
 export type ProductStatus = "available" | "soon";
