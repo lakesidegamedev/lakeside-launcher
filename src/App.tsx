@@ -17,6 +17,8 @@ import {
   onSignInCode,
   openExternal,
   openWebGame,
+  getReleaseManifest,
+  type ReleaseProduct,
 } from "./lib/tauri";
 import { Sidebar } from "./components/Sidebar";
 import { LibraryView } from "./components/LibraryView";
@@ -58,6 +60,7 @@ export function App(): JSX.Element {
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [updateProgress, setUpdateProgress] = useState<number | null>(null);
   const [updating, setUpdating] = useState(false);
+  const [releases, setReleases] = useState<Record<string, ReleaseProduct>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -91,6 +94,21 @@ export function App(): JSX.Element {
       })
       .catch(() => {
         // Offline or the feed is unreachable: stay quiet on startup.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isDesktop()) return;
+    let cancelled = false;
+    void getReleaseManifest()
+      .then((manifest) => {
+        if (!cancelled) setReleases(manifest.products);
+      })
+      .catch(() => {
+        // The library still works without release metadata.
       });
     return () => {
       cancelled = true;
@@ -318,6 +336,7 @@ export function App(): JSX.Element {
             session={session}
             entitlements={entitlements}
             mode={client.mode}
+            releases={releases}
             onSignIn={() => void handleSignIn()}
             onSignOut={() => void handleSignOut()}
             onRefresh={() =>
@@ -334,6 +353,7 @@ export function App(): JSX.Element {
         <ProductDetail
           product={selected}
           entitlements={entitlements}
+          release={releases[selected.id] ?? null}
           busy={busy === selected.id}
           onClose={() => setSelected(null)}
           onLaunch={() => void handleLaunch(selected)}

@@ -6,6 +6,7 @@ import {
   buildManifest,
   normalizeDigest,
   normalizeVersion,
+  signBytes,
   signManifest,
 } from "./manifest.mjs";
 
@@ -118,5 +119,19 @@ describe("manifest", () => {
       Buffer.from(signature, "base64"),
     );
     assert.equal(valid, true);
+  });
+
+  it("signs the exact published bytes, including the trailing newline", () => {
+    const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+    const body = `${JSON.stringify(manifest, null, 2)}\n`;
+    const signature = signBytes(body, privateKey.export({ type: "pkcs8", format: "pem" }));
+    assert.equal(
+      verify(null, Buffer.from(body), publicKey, Buffer.from(signature, "base64")),
+      true,
+    );
+    assert.equal(
+      verify(null, Buffer.from(body.trim()), publicKey, Buffer.from(signature, "base64")),
+      false,
+    );
   });
 });

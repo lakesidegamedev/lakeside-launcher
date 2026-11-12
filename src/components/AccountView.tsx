@@ -1,10 +1,12 @@
 import { CATALOG, formatPrice, type Entitlements } from "../catalog";
 import type { Session } from "../platform/client";
+import type { ReleaseProduct } from "../lib/tauri";
 
 interface Props {
   session: Session | null;
   entitlements: Entitlements;
   mode: "demo" | "live";
+  releases: Record<string, ReleaseProduct>;
   onSignIn: () => void;
   onSignOut: () => void;
   onRefresh: () => void;
@@ -14,6 +16,7 @@ export function AccountView({
   session,
   entitlements,
   mode,
+  releases,
   onSignIn,
   onSignOut,
   onRefresh,
@@ -110,6 +113,33 @@ export function AccountView({
               <span className="badge owned">Active</span>
             </li>
           </ul>
+        </article>
+
+        <article className="panel account-panel">
+          <h2 className="section-title">Release channel</h2>
+          {Object.keys(releases).length === 0 ? (
+            <p className="panel-copy">
+              Release metadata is unavailable right now. Installed games still launch and the
+              launcher still updates itself.
+            </p>
+          ) : (
+            <ul className="purchase-list">
+              {Object.entries(releases).map(([id, release]) => (
+                <li key={id}>
+                  <span className="purchase-mark" style={{ background: "#2f7f7a" }}>
+                    {release.name.slice(0, 2).toUpperCase()}
+                  </span>
+                  <span className="purchase-copy">
+                    <strong>{release.name}</strong>
+                    <small>
+                      {release.version} · {Object.keys(release.artifacts).length} builds · signed
+                    </small>
+                  </span>
+                  <span className="badge owned">Verified</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </article>
 
         <article className="panel account-panel">

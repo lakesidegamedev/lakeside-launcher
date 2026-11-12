@@ -5,10 +5,12 @@ import {
   type Entitlements,
   type Product,
 } from "../catalog";
+import type { ReleaseProduct } from "../lib/tauri";
 
 interface Props {
   product: Product;
   entitlements: Entitlements;
+  release: ReleaseProduct | null;
   busy: boolean;
   onClose: () => void;
   onLaunch: () => void;
@@ -19,6 +21,7 @@ interface Props {
 export function ProductDetail({
   product,
   entitlements,
+  release,
   busy,
   onClose,
   onLaunch,
@@ -80,6 +83,14 @@ export function ProductDetail({
               <div>
                 <dt>Download</dt>
                 <dd>{product.installSizeMb} MB</dd>
+              </div>
+            ) : null}
+            {release ? (
+              <div>
+                <dt>Latest release</dt>
+                <dd>
+                  {release.version} · {Object.keys(release.artifacts).length} builds
+                </dd>
               </div>
             ) : null}
             <div>

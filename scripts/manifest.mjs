@@ -102,7 +102,11 @@ export function buildManifest({ releases, products = PRODUCTS, channel = "stable
 
 /** Sign the manifest as emitted, minus the signature field. */
 export function signManifest(manifest, privateKeyPem) {
-  const payload = JSON.stringify(manifest);
+  return signBytes(JSON.stringify(manifest), privateKeyPem);
+}
+
+/** Sign the exact bytes that will be published. */
+export function signBytes(payload, privateKeyPem) {
   return sign(null, Buffer.from(payload), createPrivateKey(privateKeyPem)).toString("base64");
 }
 
@@ -142,19 +146,20 @@ async function main() {
   const options = parseArgs(process.argv.slice(2));
   const releases = await collectReleases();
   const manifest = buildManifest({ releases, channel: options.channel });
+  const body = `${JSON.stringify(manifest, null, 2)}\n`;
+
+  await mkdir(dirname(options.out), { recursive: true });
+  await writeFile(options.out, body);
 
   const key = process.env.LAUNCHER_MANIFEST_KEY;
   if (key) {
-    manifest.signature = signManifest(manifest, key);
-    manifest.signatureAlgorithm = "ed25519";
+    const signature = signBytes(body, key);
+    await writeFile(`${options.out}.sig`, `${signature}\n`);
+    console.log(`wrote ${options.out} and ${options.out}.sig with ${Object.keys(manifest.products).length} products`);
   } else {
-    manifest.signature = null;
-    console.warn("warning: LAUNCHER_MANIFEST_KEY is unset; emitting an unsigned manifest");
+    console.warn("warning: LAUNCHER_MANIFEST_KEY is unset; wrote an unsigned manifest and no .sig");
+    console.log(`wrote ${options.out} with ${Object.keys(manifest.products).length} products`);
   }
-
-  await mkdir(dirname(options.out), { recursive: true });
-  await writeFile(options.out, `${JSON.stringify(manifest, null, 2)}\n`);
-  console.log(`wrote ${options.out} with ${Object.keys(manifest.products).length} products`);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

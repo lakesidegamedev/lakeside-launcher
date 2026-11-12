@@ -1,0 +1,45 @@
+name: ahd client install probe
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: windows-latest
+    steps:
+      - name: Install AHDClient silently and inspect the result
+        shell: pwsh
+        run: |
+          $ProgressPreference = 'SilentlyContinue'
+          $url = 'https://github.com/lakesidegamedev/AHDClient/releases/download/v2.9.0/AHDClient_2.9.0_x64-setup.exe'
+          $file = Join-Path $env:RUNNER_TEMP 'AHDClient-setup.exe'
+          Invoke-WebRequest -Uri $url -OutFile $file
+          "installer bytes: " + (Get-Item $file).Length
+          Start-Process -FilePath $file -ArgumentList '/S' -Wait
+          Start-Sleep -Seconds 3
+
+          "LOCALAPPDATA=" + $env:LOCALAPPDATA
+          Get-ChildItem -Path $env:LOCALAPPDATA -Filter 'AHDClient*' -Directory -ErrorAction SilentlyContinue |
+            ForEach-Object { "DIR " + $_.FullName }
+          Get-ChildItem -Path $env:ProgramFiles -Filter 'AHDClient*' -Directory -ErrorAction SilentlyContinue |
+            ForEach-Object { "PF " + $_.FullName }
+
+          $candidates = @(
+            (Join-Path $env:LOCALAPPDATA 'AHDClient\AHDClient.exe'),
+            (Join-Path $env:LOCALAPPDATA 'Programs\AHDClient\AHDClient.exe'),
+            (Join-Path $env:ProgramFiles 'AHDClient\AHDClient.exe')
+          )
+          foreach ($candidate in $candidates) {
+            "candidate $candidate = " + (Test-Path $candidate)
+            if (Test-Path $candidate) {
+              (Get-Item $candidate).VersionInfo | Format-List FileVersion,ProductVersion
+              Get-ChildItem (Split-Path $candidate) | Select-Object Name, Length | Format-Table
+            }
+          }
+
+          Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue |
+            Where-Object { $_.DisplayName -like '*House Divided*' -or $_.DisplayName -like '*AHD*' } |
+            Select-Object DisplayName, DisplayVersion, InstallLocation | Format-List

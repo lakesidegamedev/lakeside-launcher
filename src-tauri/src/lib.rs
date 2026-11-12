@@ -9,14 +9,17 @@
 //   root and rejected if it escapes.
 // - External URLs and game URLs must be https on Lakeside-owned hosts.
 
+use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::path::{Component, Path, PathBuf};
 use std::time::{Duration, Instant};
 
+use base64::Engine as _;
+use ed25519_dalek::{Signature, VerifyingKey};
 use rand::distributions::Alphanumeric;
 use rand::Rng;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use url::Url;
 
@@ -25,6 +28,40 @@ const EXTERNAL_HOSTS: &[&str] = &["lakesidegames.net", "ahousedividedgame.com"];
 
 /// Hosts a game may load inside a launcher-managed webview.
 const GAME_HOSTS: &[&str] = &["lakesidegames.net", "ahousedividedgame.com"];
+
+/// Signed release manifest and the Ed25519 public key that verifies it.
+const MANIFEST_URL: &str = "https://lakesidegames.net/download/launcher/manifest.json";
+const MANIFEST_PUBLIC_KEY: &str = "RTeyfbwD+bi3VP0eazWkQgeyzz/fLM7ePOaaAqH1xoE=";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManifestArtifact {
+    pub name: String,
+    pub kind: String,
+    pub url: String,
+    pub size: Option<u64>,
+    pub sha256: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManifestProduct {
+    pub name: String,
+    pub version: String,
+    pub tag: String,
+    pub published_at: Option<String>,
+    pub notes_url: Option<String>,
+    pub artifacts: HashMap<String, ManifestArtifact>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReleaseManifest {
+    pub schema: u32,
+    pub channel: String,
+    pub generated_at: String,
+    pub products: HashMap<String, ManifestProduct>,
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -323,6 +360,72 @@ fn begin_sign_in(app: AppHandle) -> Result<SignInStart, String> {
     })
 }
 
+fn verify_with_key(
+    payload: &[u8],
+    signature_b64: &str,
+    public_key_b64: &str,
+) -> Result<(), String> {
+    let engine = base64::engine::general_purpose::STANDARD;
+    let signature_bytes = engine
+        .decode(signature_b64.trim())
+        .map_err(|_| "Release manifest signature is not valid base64.".to_string())?;
+    let signature = Signature::from_slice(&signature_bytes)
+        .map_err(|_| "Release manifest signature has the wrong length.".to_string())?;
+    let key_bytes = engine
+        .decode(public_key_b64.trim())
+        .map_err(|_| "Release manifest public key is not valid base64.".to_string())?;
+    let key_array: [u8; 32] = key_bytes
+        .try_into()
+        .map_err(|_| "Release manifest public key has the wrong length.".to_string())?;
+    let key = VerifyingKey::from_bytes(&key_array)
+        .map_err(|_| "Release manifest public key is not a valid Ed25519 key.".to_string())?;
+    key.verify_strict(payload, &signature)
+        .map_err(|_| "Release manifest signature did not verify.".to_string())
+}
+
+fn verify_manifest_signature(payload: &[u8], signature_b64: &str) -> Result<(), String> {
+    verify_with_key(payload, signature_b64, MANIFEST_PUBLIC_KEY)
+}
+
+/// Fetch the published release manifest and verify its detached signature
+/// before parsing. The signature covers the exact bytes on the wire, so the
+/// file can be served by any static host.
+#[tauri::command]
+async fn get_release_manifest() -> Result<ReleaseManifest, String> {
+    let client = reqwest::Client::builder()
+        .user_agent("lakeside-launcher")
+        .timeout(Duration::from_secs(20))
+        .build()
+        .map_err(|error| format!("Could not build the release client: {error}"))?;
+
+    let payload = client
+        .get(MANIFEST_URL)
+        .send()
+        .await
+        .map_err(|error| format!("Could not reach the release manifest: {error}"))?
+        .error_for_status()
+        .map_err(|error| format!("Release manifest returned {error}"))?
+        .bytes()
+        .await
+        .map_err(|error| format!("Could not read the release manifest: {error}"))?;
+
+    let signature = client
+        .get(format!("{MANIFEST_URL}.sig"))
+        .send()
+        .await
+        .map_err(|error| format!("Could not reach the manifest signature: {error}"))?
+        .error_for_status()
+        .map_err(|error| format!("Manifest signature returned {error}"))?
+        .text()
+        .await
+        .map_err(|error| format!("Could not read the manifest signature: {error}"))?;
+
+    verify_manifest_signature(&payload, &signature)?;
+
+    serde_json::from_slice(&payload)
+        .map_err(|error| format!("Release manifest is malformed: {error}"))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -332,7 +435,8 @@ pub fn run() {
             launch_product,
             open_web_game,
             open_external,
-            begin_sign_in
+            begin_sign_in,
+            get_release_manifest
         ])
         .run(tauri::generate_context!())
         .expect("error while running the Lakeside launcher");
@@ -368,5 +472,19 @@ mod tests {
             Some("abc".to_string())
         );
         assert_eq!(query_param("/callback?state=abc", "code"), None);
+    }
+
+    #[test]
+    fn verifies_manifest_signature_over_exact_bytes() {
+        use ed25519_dalek::{Signer, SigningKey};
+
+        let signing_key = SigningKey::from_bytes(&[9u8; 32]);
+        let payload = b"{\n  \"schema\": 1\n}\n";
+        let engine = base64::engine::general_purpose::STANDARD;
+        let signature = engine.encode(signing_key.sign(payload).to_bytes());
+        let public_key = engine.encode(signing_key.verifying_key().to_bytes());
+
+        verify_with_key(payload, &signature, &public_key).expect("signature should verify");
+        assert!(verify_with_key(b"{}", &signature, &public_key).is_err());
     }
 }

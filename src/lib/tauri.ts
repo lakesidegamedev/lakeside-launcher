@@ -40,3 +40,31 @@ export async function openWebGame(productId: string, url: string, title: string)
 export async function launchProduct(productId: string, executable: string): Promise<void> {
   await invoke<void>("launch_product", { productId, executable });
 }
+
+export interface ReleaseArtifact {
+  name: string;
+  kind: string;
+  url: string;
+  size: number | null;
+  sha256: string | null;
+}
+
+export interface ReleaseProduct {
+  name: string;
+  version: string;
+  tag: string;
+  publishedAt: string | null;
+  notesUrl: string | null;
+  artifacts: Record<string, ReleaseArtifact>;
+}
+
+export interface ReleaseManifest {
+  schema: number;
+  channel: string;
+  generatedAt: string;
+  products: Record<string, ReleaseProduct>;
+}
+
+export async function getReleaseManifest(): Promise<ReleaseManifest> {
+  return invoke<ReleaseManifest>("get_release_manifest");
+}
