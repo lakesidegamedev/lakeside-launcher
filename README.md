@@ -11,8 +11,10 @@ entitlements, and one-click AHDClient install/update on Windows.
 - Installer: [Lakeside_0.3.2_x64-setup.exe](https://github.com/lakesidegamedev/lakeside-launcher/releases/download/v0.3.2/Lakeside_0.3.2_x64-setup.exe)
 - Portable: [Lakeside.exe](https://github.com/lakesidegamedev/lakeside-launcher/releases/download/v0.3.2/Lakeside.exe)
 
-The build is unsigned, so SmartScreen warns once. The installer bootstraps
-WebView2 if it is missing; the portable exe expects the WebView2 runtime.
+The build is currently unsigned, so SmartScreen warns once. The release
+workflow signs and timestamps both binaries automatically as soon as the
+`WINDOWS_CERTIFICATE` and `WINDOWS_CERTIFICATE_PASSWORD` secrets are set; see
+[Windows code signing](#windows-code-signing).
 
 ## What Phase 0 ships
 
@@ -156,6 +158,39 @@ already present.
 
 Automatic install is Windows-only. Linux and macOS builds launch from
 `LAKESIDE_INSTALL_ROOT` but must be installed manually for now.
+
+## Windows code signing
+
+Both the installer and the portable exe are signed and timestamped when these
+repository secrets exist:
+
+| Secret | Value |
+| --- | --- |
+| `WINDOWS_CERTIFICATE` | Base64 of the code-signing `.pfx` |
+| `WINDOWS_CERTIFICATE_PASSWORD` | The PFX password |
+
+The workflow imports the certificate, passes its thumbprint to Tauri with
+`digestAlgorithm: sha256` and a DigiCert timestamp URL, then verifies every
+artifact with `Get-AuthenticodeSignature`. If the secret is absent the build
+logs `building unsigned` and continues, so forks and local builds still work.
+If the secret is present but a signature is invalid, the job fails.
+
+Do not commit the PFX. Convert it and store it as the secret:
+
+```sh
+base64 -w0 lakeside-code-signing.pfx | gh secret set WINDOWS_CERTIFICATE
+gh secret set WINDOWS_CERTIFICATE_PASSWORD
+```
+
+Certificate options:
+
+- **OV or EV code-signing certificate exported as PFX.** The simplest route.
+  An OV certificate still accumulates SmartScreen reputation over time; EV
+  normally has immediate reputation.
+- **Azure Trusted Signing.** Subscription plus organization identity
+  validation, then a custom `bundle.windows.signCommand` instead of a PFX.
+
+Until either is provided, Windows shows the unknown-publisher warning.
 
 ## CI and desktop builds
 

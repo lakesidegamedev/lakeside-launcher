@@ -28,12 +28,45 @@ jobs:
 
       - run: npm ci
 
+      - name: Prepare Windows code signing
+        id: signing
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE)) {
+            "enabled=false" >> $env:GITHUB_OUTPUT
+            Write-Host "WINDOWS_CERTIFICATE is not set; building unsigned."
+            exit 0
+          }
+
+          $pfx = Join-Path $env:RUNNER_TEMP 'lakeside-signing.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+          $secure = ConvertTo-SecureString -String $env:WINDOWS_CERTIFICATE_PASSWORD -Force -AsPlainText
+          $imported = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $secure
+
+          $config = @{
+            bundle = @{
+              windows = @{
+                certificateThumbprint = $imported.Thumbprint
+                digestAlgorithm = 'sha256'
+                timestampUrl = 'http://timestamp.digicert.com'
+              }
+            }
+          } | ConvertTo-Json -Depth 5
+          Set-Content -Path 'src-tauri/tauri.signing.conf.json' -Value $config
+
+          "enabled=true" >> $env:GITHUB_OUTPUT
+          "thumbprint=$($imported.Thumbprint)" >> $env:GITHUB_OUTPUT
+          Write-Host "Signing with $($imported.Subject)"
+
       - uses: tauri-apps/tauri-action@v0.6.2
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          args: --bundles nsis
+          args: --bundles nsis ${{ steps.signing.outputs.enabled == 'true' && '--config src-tauri/tauri.signing.conf.json' || '' }}
 
       - name: Collect artifacts
         shell: pwsh
@@ -42,6 +75,18 @@ jobs:
           Copy-Item src-tauri/target/release/lakeside-launcher.exe artifacts/Lakeside.exe
           Copy-Item src-tauri/target/release/bundle/nsis/*.exe artifacts/
           Copy-Item src-tauri/target/release/bundle/nsis/*.exe.sig artifacts/
+
+      - name: Verify Authenticode signature
+        if: steps.signing.outputs.enabled == 'true'
+        shell: pwsh
+        run: |
+          $failed = $false
+          Get-ChildItem artifacts/*.exe | ForEach-Object {
+            $signature = Get-AuthenticodeSignature $_.FullName
+            Write-Host "$($_.Name): $($signature.Status) $($signature.SignerCertificate.Subject)"
+            if ($signature.Status -ne 'Valid') { $failed = $true }
+          }
+          if ($failed) { throw 'One or more artifacts are not validly signed' }
 
       - uses: actions/upload-artifact@v4
         with:

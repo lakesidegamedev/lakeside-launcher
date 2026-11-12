@@ -23,8 +23,10 @@ signed manifest, and signs in to the live Lakeside account services.
 
 ## Remaining
 
-1. **Windows code signing.** The binaries are unsigned, so SmartScreen warns on
-   install and update. This is the largest remaining trust gap.
+1. **Windows code signing.** The workflow is ready: set `WINDOWS_CERTIFICATE`
+   and `WINDOWS_CERTIFICATE_PASSWORD` and the installer and portable exe are
+   signed, timestamped and verified. The certificate itself is the remaining
+   input, so SmartScreen still warns until it is provided.
 2. **Paid artifact protection.** Native release artifacts currently point at
    public GitHub release URLs. If a paid native game ever ships, its download
    needs a presigned URL or a token-checking proxy. The entitlement gate is
