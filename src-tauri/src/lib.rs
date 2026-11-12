@@ -632,6 +632,192 @@ async fn install_release(
     .await
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlatformSession {
+    pub username: String,
+    pub email: Option<String>,
+    pub provider: String,
+    pub avatar_url: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StoredSession {
+    token: String,
+    session: PlatformSession,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SessionResponse {
+    token: String,
+    session: PlatformSession,
+}
+
+#[derive(Deserialize)]
+struct EntitlementsResponse {
+    entitlements: HashMap<String, String>,
+}
+
+fn platform_base() -> String {
+    std::env::var("LAKESIDE_PLATFORM_API")
+        .unwrap_or_else(|_| "https://lakesidegames.net".to_string())
+        .trim_end_matches('/')
+        .to_string()
+}
+
+fn session_file(app: &AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_config_dir()
+        .map(|directory| directory.join("session.json"))
+        .map_err(|error| format!("Could not resolve the app config directory: {error}"))
+}
+
+fn write_session(app: &AppHandle, stored: &StoredSession) -> Result<(), String> {
+    let path = session_file(app)?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|error| format!("Could not create the session directory: {error}"))?;
+    }
+    let body = serde_json::to_vec(stored)
+        .map_err(|error| format!("Could not encode the session: {error}"))?;
+    let temporary = path.with_extension("json.tmp");
+    std::fs::write(&temporary, body)
+        .map_err(|error| format!("Could not write the session: {error}"))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&temporary, std::fs::Permissions::from_mode(0o600));
+    }
+    std::fs::rename(&temporary, &path)
+        .map_err(|error| format!("Could not finalize the session: {error}"))
+}
+
+fn read_session(app: &AppHandle) -> Result<Option<StoredSession>, String> {
+    let path = session_file(app)?;
+    match std::fs::read(&path) {
+        Ok(bytes) => serde_json::from_slice(&bytes)
+            .map(Some)
+            .map_err(|error| format!("The stored session is unreadable: {error}")),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(format!("Could not read the session: {error}")),
+    }
+}
+
+fn parse_session_response(bytes: &[u8]) -> Result<(String, PlatformSession), String> {
+    let parsed: SessionResponse = serde_json::from_slice(bytes)
+        .map_err(|error| format!("The platform returned an invalid session: {error}"))?;
+    if parsed.token.trim().is_empty() || parsed.session.username.trim().is_empty() {
+        return Err("The platform returned an empty session.".to_string());
+    }
+    Ok((parsed.token, parsed.session))
+}
+
+fn parse_entitlements(bytes: &[u8]) -> Result<HashMap<String, String>, String> {
+    let parsed: EntitlementsResponse = serde_json::from_slice(bytes)
+        .map_err(|error| format!("The platform returned invalid entitlements: {error}"))?;
+    Ok(parsed.entitlements)
+}
+
+#[tauri::command]
+fn platform_session(app: AppHandle) -> Result<Option<PlatformSession>, String> {
+    Ok(read_session(&app)?.map(|stored| stored.session))
+}
+
+/// Redeem a browser handoff code through lakeside-accounts and persist the
+/// resulting launcher session. The token never enters the webview.
+#[tauri::command]
+async fn platform_exchange(app: AppHandle, code: String) -> Result<PlatformSession, String> {
+    if code.trim().is_empty() || code.len() > 2048 {
+        return Err("The sign-in code is invalid.".to_string());
+    }
+    let client = reqwest::Client::builder()
+        .user_agent("lakeside-launcher")
+        .timeout(Duration::from_secs(20))
+        .build()
+        .map_err(|error| format!("Could not build the platform client: {error}"))?;
+
+    let body = serde_json::json!({ "code": code }).to_string();
+    let response = client
+        .post(format!("{}/launcher/session", platform_base()))
+        .header("content-type", "application/json")
+        .body(body)
+        .send()
+        .await
+        .map_err(|error| format!("Could not reach the Lakeside platform: {error}"))?;
+
+    if response.status() == reqwest::StatusCode::UNAUTHORIZED
+        || response.status() == reqwest::StatusCode::BAD_REQUEST
+    {
+        return Err("Sign-in could not be completed. Try again.".to_string());
+    }
+
+    let bytes = response
+        .error_for_status()
+        .map_err(|error| format!("The Lakeside platform returned {error}"))?
+        .bytes()
+        .await
+        .map_err(|error| format!("Could not read the platform response: {error}"))?;
+
+    let (token, session) = parse_session_response(&bytes)?;
+    write_session(
+        &app,
+        &StoredSession {
+            token,
+            session: session.clone(),
+        },
+    )?;
+    Ok(session)
+}
+
+#[tauri::command]
+async fn platform_entitlements(app: AppHandle) -> Result<HashMap<String, String>, String> {
+    let stored = read_session(&app)?
+        .ok_or_else(|| "You are not signed in to the Lakeside platform.".to_string())?;
+
+    let client = reqwest::Client::builder()
+        .user_agent("lakeside-launcher")
+        .timeout(Duration::from_secs(20))
+        .build()
+        .map_err(|error| format!("Could not build the platform client: {error}"))?;
+
+    let response = client
+        .get(format!("{}/launcher/entitlements", platform_base()))
+        .bearer_auth(&stored.token)
+        .send()
+        .await
+        .map_err(|error| format!("Could not reach the Lakeside platform: {error}"))?;
+
+    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+        if let Ok(path) = session_file(&app) {
+            let _ = std::fs::remove_file(path);
+        }
+        return Err("Your Lakeside session expired. Sign in again.".to_string());
+    }
+
+    let bytes = response
+        .error_for_status()
+        .map_err(|error| format!("The Lakeside platform returned {error}"))?
+        .bytes()
+        .await
+        .map_err(|error| format!("Could not read the platform response: {error}"))?;
+
+    parse_entitlements(&bytes)
+}
+
+#[tauri::command]
+fn platform_sign_out(app: AppHandle) -> Result<(), String> {
+    if let Ok(path) = session_file(&app) {
+        match std::fs::remove_file(path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(format!("Could not clear the session: {error}")),
+        }
+    }
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -644,7 +830,11 @@ pub fn run() {
             begin_sign_in,
             get_release_manifest,
             is_installed,
-            install_release
+            install_release,
+            platform_session,
+            platform_exchange,
+            platform_entitlements,
+            platform_sign_out
         ])
         .run(tauri::generate_context!())
         .expect("error while running the Lakeside launcher");
@@ -710,5 +900,21 @@ mod tests {
         assert!(safe_join(&root, "game/missing.exe").is_err());
 
         let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn parses_platform_session_and_entitlements() {
+        let bytes = br#"{"token":"tok","session":{"username":"player","email":"p@example.com","provider":"discord","avatarUrl":null}}"#;
+        let (token, session) = parse_session_response(bytes).expect("session");
+        assert_eq!(token, "tok");
+        assert_eq!(session.username, "player");
+        assert_eq!(session.provider, "discord");
+
+        let entitlements =
+            parse_entitlements(br#"{"entitlements":{"ahd-client":"owned"}}"#).expect("entitlements");
+        assert_eq!(entitlements.get("ahd-client").map(String::as_str), Some("owned"));
+
+        assert!(parse_session_response(b"{}").is_err());
+        assert!(parse_entitlements(b"{}").is_err());
     }
 }

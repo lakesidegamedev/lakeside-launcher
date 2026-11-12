@@ -108,3 +108,26 @@ export async function onInstallProgress(
   const { listen } = await import("@tauri-apps/api/event");
   return listen<InstallProgress>("install-progress", (event) => handler(event.payload));
 }
+
+export interface PlatformSession {
+  username: string;
+  email: string | null;
+  provider: string;
+  avatarUrl: string | null;
+}
+
+export async function platformSession(): Promise<PlatformSession | null> {
+  return invoke<PlatformSession | null>("platform_session");
+}
+
+export async function platformExchange(code: string): Promise<PlatformSession> {
+  return invoke<PlatformSession>("platform_exchange", { code });
+}
+
+export async function platformEntitlements(): Promise<Record<string, string>> {
+  return invoke<Record<string, string>>("platform_entitlements");
+}
+
+export async function platformSignOut(): Promise<void> {
+  await invoke<void>("platform_sign_out");
+}

@@ -6,12 +6,20 @@
 // Nothing in this file is a source of truth for money or access. The launcher
 // renders; the platform decides.
 
+import {
+  platformEntitlements,
+  platformExchange,
+  platformSession,
+  platformSignOut,
+} from "../lib/tauri";
+
 export type IdentityProvider = "ahd" | "discord" | "demo";
 
 export interface Session {
   username: string;
   email: string | null;
-  provider: IdentityProvider;
+  /** "ahd", "discord" or "demo". Kept as a string because the platform owns the set. */
+  provider: string;
   avatarUrl: string | null;
 }
 
@@ -85,56 +93,38 @@ class DemoClient implements PlatformClient {
   }
 }
 
-const API_BASE = (import.meta.env.VITE_PLATFORM_API as string | undefined) ?? "https://lakesidegames.net";
-
 /**
- * Live client. These endpoints are the Phase 2 contract:
- *   POST /launcher/session      { code } -> { session }
+ * Live client. Identity and entitlements are fetched by the Rust side, which
+ * keeps the session token out of the webview and avoids CORS entirely.
+ * The platform contract:
+ *   POST /launcher/session      { code } -> { token, session }
  *   GET  /launcher/entitlements           -> { entitlements: { [productId]: state } }
- *   POST /launcher/logout
- * They do not exist yet; the UI reports that plainly instead of pretending.
  */
 class LiveClient implements PlatformClient {
   readonly mode = "live" as const;
 
   async getSession(): Promise<Session | null> {
-    return readStorage<Session>(SESSION_KEY);
+    return (await platformSession()) as Session | null;
   }
 
   async exchange(code: string): Promise<Session> {
-    const res = await fetch(`${API_BASE}/launcher/session`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ code }),
-    });
-    if (!res.ok) {
-      throw new Error(
-        res.status === 404
-          ? "The launcher sign-in endpoint is not deployed yet. Run in demo mode (VITE_PLATFORM_MODE=demo)."
-          : `Sign-in failed (${res.status}).`,
-      );
-    }
-    const body = (await res.json()) as { session: Session };
-    writeStorage(SESSION_KEY, body.session);
-    return body.session;
+    return (await platformExchange(code)) as Session;
   }
 
   async signOut(): Promise<void> {
+    await platformSignOut();
     localStorage.removeItem(SESSION_KEY);
     localStorage.removeItem(ENTITLEMENTS_KEY);
   }
 
   async getEntitlements(): Promise<Entitlements> {
-    const cached = readStorage<Entitlements>(ENTITLEMENTS_KEY);
     try {
-      const res = await fetch(`${API_BASE}/launcher/entitlements`, { credentials: "include" });
-      if (!res.ok) throw new Error(String(res.status));
-      const body = (await res.json()) as { entitlements: Entitlements };
-      writeStorage(ENTITLEMENTS_KEY, body.entitlements);
-      return body.entitlements;
+      const next = (await platformEntitlements()) as Entitlements;
+      writeStorage(ENTITLEMENTS_KEY, next);
+      return next;
     } catch {
       // Boot into the last known library rather than a spinner.
-      return cached ?? {};
+      return readStorage<Entitlements>(ENTITLEMENTS_KEY) ?? {};
     }
   }
 }
