@@ -131,10 +131,10 @@ That copies the installer and signature into
 atomically. Caddy serves the directory publicly, so no GitHub credentials are
 needed by players.
 
-The updater private key lives at `/root/.tauri/lakeside-launcher.key` with its
-password beside it, outside the repository. CI reads the key from the
-`TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` secrets.
-Losing either makes future updates impossible; back them up before rotating.
+The updater private key lives outside the repository in the deployment
+environment. CI reads it from the `TAURI_SIGNING_PRIVATE_KEY` and
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` secrets. Losing either makes future
+updates impossible; back them up before rotating.
 
 Version 0.1.0 predates the updater. 0.2.x and 0.3.x update in place; users on
 0.1.0 need one manual install of 0.3.2 or later.

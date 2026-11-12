@@ -25,8 +25,8 @@ signed manifest, and signs in to the live Lakeside account services.
 
 1. **Windows code signing.** The workflow is ready: set `WINDOWS_CERTIFICATE`
    and `WINDOWS_CERTIFICATE_PASSWORD` and the installer and portable exe are
-   signed, timestamped and verified. The certificate itself is the remaining
-   input, so SmartScreen still warns until it is provided.
+   signed, timestamped and verified. The owner chose to stay unsigned for now
+   (2026-11-12), so SmartScreen still warns until a certificate is provided.
 2. **Paid artifact protection.** Native release artifacts currently point at
    public GitHub release URLs. If a paid native game ever ships, its download
    needs a presigned URL or a token-checking proxy. The entitlement gate is
