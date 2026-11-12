@@ -28,12 +28,13 @@ jobs:
           Start-Sleep -Seconds 5
 
           $entry = Get-LauncherEntry
+          $location = $entry.InstallLocation.Trim('"')
           "installed=" + $entry.DisplayVersion
-          "installLocation=" + $entry.InstallLocation
-          Get-ChildItem -Path $entry.InstallLocation -Recurse -File | Select-Object FullName | Format-Table -AutoSize
+          "installLocation=" + $location
+          Get-ChildItem -Path $location -Recurse -File | Select-Object FullName | Format-Table -AutoSize
           if ($entry.DisplayVersion -ne '0.3.1') { throw '0.3.1 did not install' }
 
-          $exe = Get-ChildItem -Path $entry.InstallLocation -Recurse -Filter '*.exe' |
+          $exe = Get-ChildItem -Path $location -Recurse -Filter '*.exe' |
             Where-Object { $_.Name -notmatch 'uninstall' } |
             Select-Object -First 1 -ExpandProperty FullName
           if (-not $exe) { throw 'launcher executable not found' }
