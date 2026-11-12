@@ -24,6 +24,8 @@ jobs:
           "LOCALAPPDATA=" + $env:LOCALAPPDATA
           Get-ChildItem -Path $env:LOCALAPPDATA -Filter 'AHDClient*' -Directory -ErrorAction SilentlyContinue |
             ForEach-Object { "DIR " + $_.FullName }
+          Get-ChildItem -Path (Join-Path $env:LOCALAPPDATA 'AHDClient') -Recurse -File -ErrorAction SilentlyContinue |
+            Select-Object FullName, Length | Format-Table -AutoSize
           Get-ChildItem -Path $env:ProgramFiles -Filter 'AHDClient*' -Directory -ErrorAction SilentlyContinue |
             ForEach-Object { "PF " + $_.FullName }
 
