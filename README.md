@@ -7,10 +7,10 @@ This is Phase 0. It is a working shell with a real catalog and launch paths, a
 demo platform client, and a live client aimed at endpoints that are specified
 but not deployed yet. It does **not** install or update games yet.
 
-## Download (Windows, 0.1.0)
+## Download (Windows, 0.2.1)
 
-- Installer: [Lakeside_0.1.0_x64-setup.exe](https://github.com/lakesidegamedev/lakeside-launcher/releases/download/v0.1.0/Lakeside_0.1.0_x64-setup.exe)
-- Portable: [Lakeside.exe](https://github.com/lakesidegamedev/lakeside-launcher/releases/download/v0.1.0/Lakeside.exe)
+- Installer: [Lakeside_0.2.1_x64-setup.exe](https://github.com/lakesidegamedev/lakeside-launcher/releases/download/v0.2.1/Lakeside_0.2.1_x64-setup.exe)
+- Portable: [Lakeside.exe](https://github.com/lakesidegamedev/lakeside-launcher/releases/download/v0.2.1/Lakeside.exe)
 
 The build is unsigned, so SmartScreen warns once. The installer bootstraps
 WebView2 if it is missing; the portable exe expects the WebView2 runtime.
@@ -139,6 +139,26 @@ Losing either makes future updates impossible; back them up before rotating.
 
 Version 0.1.0 predates the updater, so 0.2.0 is the last manual install. Every
 build after that can update in place.
+
+## Installing a game
+
+The launcher reads the signed manifest at
+`https://lakesidegames.net/download/launcher/manifest.json`. When a native game
+is owned and not installed, its detail sheet offers **Install**:
+
+1. Download the artifact from the URL in the manifest.
+2. Verify its sha256 against the digest in the manifest.
+3. Run the NSIS installer silently.
+4. Confirm the expected executable exists under the install root, then launch.
+
+On Windows the install root is `%LOCALAPPDATA%`, because the Tauri installers
+install per-user. AHDClient lands at
+`%LOCALAPPDATA%\AHDClient\ahdclient-desktop.exe`. The same path updates an
+existing install; the detail sheet offers **Update to x.y.z** when a build is
+already present.
+
+Automatic install is Windows-only. Linux and macOS builds launch from
+`LAKESIDE_INSTALL_ROOT` but must be installed manually for now.
 
 ## CI and desktop builds
 

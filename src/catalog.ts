@@ -63,7 +63,7 @@ export const CATALOG: readonly Product[] = [
     webUrl: "https://www.ahousedividedgame.com",
     webLabel: "Play multiplayer online",
     executables: {
-      windows: "AHDClient/AHDClient.exe",
+      windows: "AHDClient/ahdclient-desktop.exe",
       macos: "AHDClient.app/Contents/MacOS/AHDClient",
       linux: "AHDClient/ahdclient.AppImage",
     },

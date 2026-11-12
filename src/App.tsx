@@ -18,6 +18,11 @@ import {
   openExternal,
   openWebGame,
   getReleaseManifest,
+  installRelease,
+  isInstalled,
+  onInstallProgress,
+  type InstallProgress,
+  type ReleaseArtifact,
   type ReleaseProduct,
 } from "./lib/tauri";
 import { Sidebar } from "./components/Sidebar";
@@ -61,6 +66,9 @@ export function App(): JSX.Element {
   const [updateProgress, setUpdateProgress] = useState<number | null>(null);
   const [updating, setUpdating] = useState(false);
   const [releases, setReleases] = useState<Record<string, ReleaseProduct>>({});
+  const [installed, setInstalled] = useState<Record<string, boolean>>({});
+  const [installing, setInstalling] = useState<string | null>(null);
+  const [installFraction, setInstallFraction] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -112,6 +120,39 @@ export function App(): JSX.Element {
       });
     return () => {
       cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isDesktop()) return;
+    let cancelled = false;
+    const platform = detectPlatform();
+    void Promise.all(
+      CATALOG.filter((product) => product.delivery === "native").map(async (product) => {
+        const executable = executableFor(product, platform);
+        if (!executable) return [product.id, false] as const;
+        return [product.id, await isInstalled(executable)] as const;
+      }),
+    ).then((entries) => {
+      if (!cancelled) setInstalled(Object.fromEntries(entries));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isDesktop()) return;
+    let unlisten: (() => void) | null = null;
+    void onInstallProgress((progress: InstallProgress) => {
+      if (progress.total && progress.total > 0) {
+        setInstallFraction(Math.min(progress.downloaded / progress.total, 1));
+      }
+    }).then((stop) => {
+      unlisten = stop;
+    });
+    return () => {
+      unlisten?.();
     };
   }, []);
 
@@ -178,8 +219,59 @@ export function App(): JSX.Element {
     }
   }
 
-  async function handleLaunch(product: Product): Promise<void> {
+  function artifactFor(product: Product): ReleaseArtifact | null {
+    const release = releases[product.id];
+    if (!release) return null;
     const platform = detectPlatform();
+    const key =
+      platform === "windows"
+        ? "windows-x64"
+        : platform === "linux"
+          ? "linux-x64"
+          : platform === "macos"
+            ? "macos-arm64"
+            : platform === "android"
+              ? "android"
+              : null;
+    return key ? (release.artifacts[key] ?? null) : null;
+  }
+
+  function canInstall(product: Product): boolean {
+    if (!isDesktop() || product.delivery !== "native") return false;
+    const artifact = artifactFor(product);
+    return artifact?.kind === "nsis" && !!artifact.sha256;
+  }
+
+  async function handleInstall(product: Product): Promise<void> {
+    const release = releases[product.id];
+    const artifact = artifactFor(product);
+    if (!release || !artifact || !artifact.sha256) {
+      setNotice("No verified installer is published for this platform yet.");
+      return;
+    }
+
+    setInstalling(product.id);
+    setInstallFraction(null);
+    try {
+      const result = await installRelease({
+        productId: product.id,
+        version: release.version,
+        url: artifact.url,
+        sha256: artifact.sha256,
+        fileName: artifact.name,
+        kind: artifact.kind,
+      });
+      setInstalled((previous) => ({ ...previous, [product.id]: true }));
+      setNotice(`Installed ${product.title} ${result.version}.`);
+    } catch (error) {
+      setNotice(message(error));
+    } finally {
+      setInstalling(null);
+      setInstallFraction(null);
+    }
+  }
+
+  async function handleLaunch(product: Product): Promise<void> {    const platform = detectPlatform();
     const executable = executableFor(product, platform);
     if (!executable) {
       setNotice(`No ${platform} build is configured for ${product.title}.`);
@@ -233,7 +325,11 @@ export function App(): JSX.Element {
     }
     if (product.delivery === "native") {
       if (canLaunchDesktop(product, entitlements)) {
-        void handleLaunch(product);
+        if (!installed[product.id] && canInstall(product)) {
+          void handleInstall(product);
+        } else {
+          void handleLaunch(product);
+        }
       } else if (product.webUrl) {
         void handleWeb(product);
       } else if (product.priceCents !== null) {
@@ -245,7 +341,18 @@ export function App(): JSX.Element {
   function primaryLabel(product: Product): string {
     if (product.status === "soon") return "Coming soon";
     if (product.delivery === "web") return "Play in browser";
-    if (canLaunchDesktop(product, entitlements)) return "Launch desktop";
+    if (canLaunchDesktop(product, entitlements)) {
+      if (installing === product.id) {
+        return installFraction === null
+          ? "Installing..."
+          : `Installing ${Math.round(installFraction * 100)}%`;
+      }
+      if (!installed[product.id] && canInstall(product)) {
+        const version = releases[product.id]?.version;
+        return version ? `Install ${version}` : "Install";
+      }
+      return "Launch desktop";
+    }
     if (product.webUrl) return "Play online";
     if (product.priceCents !== null) return "Buy";
     return "Unavailable";
@@ -313,7 +420,7 @@ export function App(): JSX.Element {
           <LibraryView
             products={library}
             entitlements={entitlements}
-            busy={busy}
+            busy={installing ?? busy}
             onSelect={setSelected}
             onPrimary={handlePrimary}
             onWeb={(product) => void handleWeb(product)}
@@ -354,9 +461,14 @@ export function App(): JSX.Element {
           product={selected}
           entitlements={entitlements}
           release={releases[selected.id] ?? null}
+          installed={!!installed[selected.id]}
+          installing={installing === selected.id}
+          installFraction={installFraction}
+          canInstall={canInstall(selected)}
           busy={busy === selected.id}
           onClose={() => setSelected(null)}
           onLaunch={() => void handleLaunch(selected)}
+          onInstall={() => void handleInstall(selected)}
           onWeb={() => void handleWeb(selected)}
           onBuy={() => handleBuy(selected)}
         />

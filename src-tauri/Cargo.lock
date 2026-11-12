@@ -1935,10 +1935,12 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "sha2",
  "tauri",
  "tauri-build",
  "tauri-plugin-process",
  "tauri-plugin-updater",
+ "tokio",
  "url",
 ]
 

@@ -20,7 +20,11 @@ use ed25519_dalek::{Signature, VerifyingKey};
 use rand::distributions::Alphanumeric;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
+#[cfg(target_os = "windows")]
+use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
+#[cfg(target_os = "windows")]
+use tokio::io::AsyncWriteExt;
 use url::Url;
 
 /// Hosts the launcher may open in a system browser (sign-in, checkout, docs).
@@ -28,6 +32,37 @@ const EXTERNAL_HOSTS: &[&str] = &["lakesidegames.net", "ahousedividedgame.com"];
 
 /// Hosts a game may load inside a launcher-managed webview.
 const GAME_HOSTS: &[&str] = &["lakesidegames.net", "ahousedividedgame.com"];
+
+/// Hosts allowed for release artifact downloads. The signed manifest is
+/// authoritative, but this keeps a compromised manifest from pointing at an
+/// arbitrary origin (and HTTPS is required by validate_url).
+#[cfg(target_os = "windows")]
+const DOWNLOAD_HOSTS: &[&str] = &["github.com", "githubusercontent.com", "lakesidegames.net"];
+
+#[cfg(target_os = "windows")]
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InstallProgress {
+    product_id: String,
+    downloaded: u64,
+    total: Option<u64>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InstallResult {
+    version: String,
+    executable: String,
+}
+
+#[cfg(target_os = "windows")]
+fn installed_executable(product_id: &str) -> Option<&'static str> {
+    match product_id {
+        // Tauri NSIS installs per-user into %LOCALAPPDATA%\AHDClient.
+        "ahd" => Some("AHDClient/ahdclient-desktop.exe"),
+        _ => None,
+    }
+}
 
 /// Signed release manifest and the Ed25519 public key that verifies it.
 const MANIFEST_URL: &str = "https://lakesidegames.net/download/launcher/manifest.json";
@@ -98,6 +133,16 @@ fn install_root(app: &AppHandle) -> PathBuf {
         let trimmed = value.trim();
         if !trimmed.is_empty() {
             return PathBuf::from(trimmed);
+        }
+    }
+    // Tauri NSIS installs per-user to %LOCALAPPDATA%\AHDClient, so the catalog
+    // path AHDClient/ahdclient-desktop.exe resolves from LOCALAPPDATA.
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(local) = std::env::var("LOCALAPPDATA") {
+            if !local.trim().is_empty() {
+                return PathBuf::from(local);
+            }
         }
     }
     app.path()
@@ -426,6 +471,135 @@ async fn get_release_manifest() -> Result<ReleaseManifest, String> {
         .map_err(|error| format!("Release manifest is malformed: {error}"))
 }
 
+#[tauri::command]
+fn is_installed(app: AppHandle, executable: String) -> bool {
+    safe_join(&install_root(&app), &executable).is_ok()
+}
+
+/// Download a signed-manifest artifact, verify its sha256, run the NSIS
+/// installer silently and confirm the expected executable appeared.
+#[tauri::command]
+async fn install_release(
+    app: AppHandle,
+    product_id: String,
+    version: String,
+    url: String,
+    sha256: String,
+    file_name: String,
+    kind: String,
+) -> Result<InstallResult, String> {
+    if product_id.is_empty()
+        || product_id.len() > 64
+        || !product_id
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || character == '-')
+    {
+        return Err("Invalid product id.".to_string());
+    }
+    if kind != "nsis" {
+        return Err(format!(
+            "Automatic installation does not support the {kind} package format yet."
+        ));
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (&app, &version, &url, &sha256, &file_name);
+        return Err("Automatic game installation is currently Windows-only. Download the installer from the game's release page.".to_string());
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let parsed = validate_url(&url, DOWNLOAD_HOSTS)?;
+        let safe_name = Path::new(&file_name)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .filter(|name| !name.is_empty() && name.len() <= 200)
+            .ok_or_else(|| "The release asset name is invalid.".to_string())?
+            .to_string();
+
+        let client = reqwest::Client::builder()
+            .user_agent("lakeside-launcher")
+            .timeout(Duration::from_secs(900))
+            .build()
+            .map_err(|error| format!("Could not build the download client: {error}"))?;
+
+        let mut response = client
+            .get(parsed)
+            .send()
+            .await
+            .map_err(|error| format!("Could not download the game: {error}"))?
+            .error_for_status()
+            .map_err(|error| format!("Game download returned {error}"))?;
+
+        validate_url(response.url().as_str(), DOWNLOAD_HOSTS)?;
+        let total = response.content_length();
+
+        let directory = std::env::temp_dir().join("lakeside-launcher-downloads");
+        tokio::fs::create_dir_all(&directory)
+            .await
+            .map_err(|error| format!("Could not create the download directory: {error}"))?;
+        let destination = directory.join(&safe_name);
+        let mut file = tokio::fs::File::create(&destination)
+            .await
+            .map_err(|error| format!("Could not write the download: {error}"))?;
+
+        let mut hasher = Sha256::new();
+        let mut downloaded: u64 = 0;
+        while let Some(chunk) = response
+            .chunk()
+            .await
+            .map_err(|error| format!("Game download stopped: {error}"))?
+        {
+            file.write_all(&chunk)
+                .await
+                .map_err(|error| format!("Could not write the download: {error}"))?;
+            hasher.update(&chunk);
+            downloaded += chunk.len() as u64;
+            let _ = app.emit(
+                "install-progress",
+                InstallProgress {
+                    product_id: product_id.clone(),
+                    downloaded,
+                    total,
+                },
+            );
+        }
+        file.flush()
+            .await
+            .map_err(|error| format!("Could not finish the download: {error}"))?;
+        drop(file);
+
+        let digest = hasher.finalize();
+        let actual: String = digest.iter().map(|byte| format!("{byte:02x}")).collect();
+        if !actual.eq_ignore_ascii_case(sha256.trim()) {
+            let _ = tokio::fs::remove_file(&destination).await;
+            return Err("Download did not match the signed release manifest.".to_string());
+        }
+
+        let status = std::process::Command::new(&destination)
+            .arg("/S")
+            .status()
+            .map_err(|error| format!("Could not start the installer: {error}"))?;
+        let _ = tokio::fs::remove_file(&destination).await;
+        if !status.success() {
+            return Err("The installer reported a failure.".to_string());
+        }
+
+        let executable = installed_executable(&product_id).ok_or_else(|| {
+            "Automatic installation is not configured for this product.".to_string()
+        })?;
+        safe_join(&install_root(&app), executable).map_err(|_| {
+            "The installer finished but the game executable was not found.".to_string()
+        })?;
+
+        Ok(InstallResult {
+            version,
+            executable: executable.to_string(),
+        })
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -436,7 +610,9 @@ pub fn run() {
             open_web_game,
             open_external,
             begin_sign_in,
-            get_release_manifest
+            get_release_manifest,
+            is_installed,
+            install_release
         ])
         .run(tauri::generate_context!())
         .expect("error while running the Lakeside launcher");
@@ -486,5 +662,21 @@ mod tests {
 
         verify_with_key(payload, &signature, &public_key).expect("signature should verify");
         assert!(verify_with_key(b"{}", &signature, &public_key).is_err());
+    }
+
+    #[test]
+    fn resolves_executables_only_inside_the_install_root() {
+        use std::fs;
+
+        let root = std::env::temp_dir().join(format!("lakeside-paths-{}", std::process::id()));
+        fs::create_dir_all(root.join("game")).expect("create temp root");
+        fs::write(root.join("game").join("game.exe"), b"binary").expect("write exe");
+
+        assert!(safe_join(&root, "game/game.exe").is_ok());
+        assert!(safe_join(&root, "../game.exe").is_err());
+        assert!(safe_join(&root, "/etc/passwd").is_err());
+        assert!(safe_join(&root, "game/missing.exe").is_err());
+
+        let _ = fs::remove_dir_all(&root);
     }
 }

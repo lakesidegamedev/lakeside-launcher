@@ -11,9 +11,14 @@ interface Props {
   product: Product;
   entitlements: Entitlements;
   release: ReleaseProduct | null;
+  installed: boolean;
+  installing: boolean;
+  installFraction: number | null;
+  canInstall: boolean;
   busy: boolean;
   onClose: () => void;
   onLaunch: () => void;
+  onInstall: () => void;
   onWeb: () => void;
   onBuy: () => void;
 }
@@ -22,9 +27,14 @@ export function ProductDetail({
   product,
   entitlements,
   release,
+  installed,
+  installing,
+  installFraction,
+  canInstall,
   busy,
   onClose,
   onLaunch,
+  onInstall,
   onWeb,
   onBuy,
 }: Props): JSX.Element {
@@ -95,7 +105,15 @@ export function ProductDetail({
             ) : null}
             <div>
               <dt>Status</dt>
-              <dd>{owned ? "In your library" : soon ? "Coming soon" : "Not owned"}</dd>
+              <dd>
+                {installed
+                  ? "Installed"
+                  : owned
+                    ? "In your library"
+                    : soon
+                      ? "Coming soon"
+                      : "Not owned"}
+              </dd>
             </div>
           </dl>
 
@@ -110,11 +128,40 @@ export function ProductDetail({
               </button>
             ) : launchable ? (
               <>
-                <button type="button" className="btn primary" onClick={onLaunch} disabled={busy}>
-                  {busy ? "Opening..." : "Launch desktop"}
-                </button>
+                {!installed && canInstall ? (
+                  <button
+                    type="button"
+                    className="btn primary"
+                    onClick={onInstall}
+                    disabled={installing}
+                  >
+                    {installing
+                      ? installFraction === null
+                        ? "Downloading..."
+                        : `Installing ${Math.round(installFraction * 100)}%`
+                      : `Install${release ? ` ${release.version}` : ""}`}
+                  </button>
+                ) : (
+                  <button type="button" className="btn primary" onClick={onLaunch} disabled={busy}>
+                    {busy ? "Opening..." : "Launch desktop"}
+                  </button>
+                )}
+                {installed && canInstall ? (
+                  <button
+                    type="button"
+                    className="btn ghost"
+                    onClick={onInstall}
+                    disabled={installing}
+                  >
+                    {installing
+                      ? installFraction === null
+                        ? "Downloading..."
+                        : `Installing ${Math.round(installFraction * 100)}%`
+                      : `Update to ${release?.version ?? "latest"}`}
+                  </button>
+                ) : null}
                 {product.webUrl ? (
-                  <button type="button" className="btn ghost" onClick={onWeb}>
+                  <button type="button" className="btn ghost" onClick={onWeb} disabled={installing}>
                     {product.webLabel ?? "Play online"}
                   </button>
                 ) : null}

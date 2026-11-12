@@ -68,3 +68,43 @@ export interface ReleaseManifest {
 export async function getReleaseManifest(): Promise<ReleaseManifest> {
   return invoke<ReleaseManifest>("get_release_manifest");
 }
+
+export interface InstallProgress {
+  productId: string;
+  downloaded: number;
+  total: number | null;
+}
+
+export interface InstallResult {
+  version: string;
+  executable: string;
+}
+
+export interface InstallRequest {
+  productId: string;
+  version: string;
+  url: string;
+  sha256: string;
+  fileName: string;
+  kind: string;
+}
+
+export async function isInstalled(executable: string): Promise<boolean> {
+  try {
+    return await invoke<boolean>("is_installed", { executable });
+  } catch {
+    return false;
+  }
+}
+
+export async function installRelease(request: InstallRequest): Promise<InstallResult> {
+  return invoke<InstallResult>("install_release", { ...request });
+}
+
+export async function onInstallProgress(
+  handler: (progress: InstallProgress) => void,
+): Promise<() => void> {
+  if (!isDesktop()) return () => {};
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<InstallProgress>("install-progress", (event) => handler(event.payload));
+}
