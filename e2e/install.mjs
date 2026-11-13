@@ -43,6 +43,17 @@ const GAMES = {
     registry: "Grand ?Century",
     versionPrefix: "1.",
   },
+  "urban-sprawl": {
+    title: "Urban Sprawl",
+    id: "urban-sprawl",
+    client: "urban-sprawl-desktop",
+    exeName: /^urban-sprawl\.exe$/i,
+    installDir: path.join(LOCAL, "Programs", "Urban Sprawl"),
+    registry: "Urban Sprawl",
+    versionPrefix: "1.",
+    publisher: "Lakeside Games",
+    displayNameStart: "Urban Sprawl",
+  },
 };
 
 const stages = [];
@@ -305,6 +316,12 @@ async function playThrough(key, g) {
     const entries = registryEntries(g.registry);
     console.log(`registry entries for ${g.title}: ${JSON.stringify(entries)}`);
     if (entries.length === 0) throw new Error("the setup registered no uninstall entry");
+    if (g.displayNameStart && !String(entries[0].DisplayName).startsWith(g.displayNameStart)) {
+      throw new Error(`uninstall DisplayName "${entries[0].DisplayName}" does not start with "${g.displayNameStart}"`);
+    }
+    if (g.publisher && entries[0].Publisher !== g.publisher) {
+      throw new Error(`uninstall Publisher "${entries[0].Publisher}" is not "${g.publisher}"`);
+    }
     const registered = entries[0].DisplayVersion;
     if (registered && registered !== shown) throw new Error(`launcher says ${shown}, registry says ${registered}`);
     return shown;
