@@ -44,7 +44,7 @@ fn main() {
     let platform = lib::download_platform(os, std::env::consts::ARCH).expect("a supported platform");
 
     let (version, source, sha256, name, kind, client): (String, lib::DownloadSource, String, String, String, Option<&str>) =
-        if product == "corporate-warfare" {
+        if product == "corporate-warfare" || product == "urban-sprawl" {
             let token = std::env::var("LAKESIDE_BEARER").expect("LAKESIDE_BEARER");
             let url = lib::account_release_url(&base, &product).expect("release url");
             let body = tauri::async_runtime::block_on(async {
@@ -87,7 +87,7 @@ fn main() {
                 file.sha256.clone(),
                 file.name.clone(),
                 file.installer.clone(),
-                Some("corporate-warfare-desktop"),
+                Some(if product == "urban-sprawl" { "urban-sprawl-desktop" } else { "corporate-warfare-desktop" }),
             )
         } else {
             let manifest = tauri::async_runtime::block_on(lib::load_release_manifest()).expect("signed manifest");

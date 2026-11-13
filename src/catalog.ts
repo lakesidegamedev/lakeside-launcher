@@ -2,6 +2,7 @@ import ahdArt from "./assets/media/ahd-map.webp";
 import corporateWarfareArt from "./assets/media/cw-goods.jpg";
 import grandCenturyArt from "./assets/media/gc-world.webp";
 import marginOfVictoryArt from "./assets/media/mov-night.jpg";
+import urbanSprawlArt from "./assets/media/us-downtown.jpg";
 
 // Delivery metadata only: how the launcher starts, installs and shows a game.
 // Names, prices, add-ons and supporter tiers come from the live store catalog
@@ -181,9 +182,8 @@ export const CATALOG: readonly Product[] = [
     browserDownloadUrl: "https://lakesidegames.net/account",
     accent: "#c98a5a",
     mark: "US",
-    // No key art yet: the monogram tile is the placeholder. Drop real art in
-    // src/assets/media and point this at it.
-    art: null,
+    // Engine render of the downtown. Set to null to fall back to the monogram tile.
+    art: urbanSprawlArt,
     installSizeMb: null,
   },
   {
