@@ -1139,6 +1139,82 @@ fn installed_products(app: AppHandle) -> HashMap<String, InstalledProduct> {
     state
 }
 
+/// Release info for a paid product from the accounts downloads API, fetched
+/// with the stored session. The bearer goes to the accounts host only and
+/// redirects are never followed. None means nothing is published (or the
+/// player is signed out); the API's checksum, name and installer kind are the
+/// authority for the install.
+async fn fetch_account_release(
+    app: &AppHandle,
+    commercial_id: &str,
+) -> Result<Option<installer::AccountRelease>, String> {
+    let Some(stored) = read_session(app)? else {
+        return Ok(None);
+    };
+    let endpoint = installer::account_release_url(&platform_base(), commercial_id)?;
+    let client = reqwest::Client::builder()
+        .user_agent("lakeside-launcher")
+        .timeout(Duration::from_secs(20))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|error| format!("Could not build the release client: {error}"))?;
+    let response = client
+        .get(endpoint)
+        .bearer_auth(&stored.token)
+        .send()
+        .await
+        .map_err(|error| format!("Could not reach the Lakeside platform: {error}"))?;
+    match response.status() {
+        status if status.is_success() => {}
+        reqwest::StatusCode::NOT_FOUND
+        | reqwest::StatusCode::UNAUTHORIZED
+        | reqwest::StatusCode::FORBIDDEN => return Ok(None),
+        status => return Err(format!("The Lakeside platform returned {status}.")),
+    }
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|error| format!("Could not read the release details: {error}"))?;
+    Ok(installer::parse_account_release(&bytes))
+}
+
+/// Paid-product release details shaped like a manifest entry. The artifact
+/// url is the authenticated accounts endpoint; the launcher never uses it
+/// directly, installs go through `install_release`.
+#[tauri::command]
+async fn account_release(
+    app: AppHandle,
+    commercial_id: String,
+) -> Result<Option<ManifestProduct>, String> {
+    let Some(release) = fetch_account_release(&app, &commercial_id).await? else {
+        return Ok(None);
+    };
+    let mut artifacts = HashMap::new();
+    for file in &release.files {
+        let Some(key) = installer::manifest_key_for_platform(&file.platform) else {
+            continue;
+        };
+        artifacts.insert(
+            key.to_string(),
+            ManifestArtifact {
+                name: file.name.clone(),
+                kind: file.installer.clone(),
+                url: installer::account_download_url(&platform_base(), &commercial_id, &file.platform)?,
+                size: file.size,
+                sha256: Some(file.sha256.clone()),
+            },
+        );
+    }
+    Ok(Some(ManifestProduct {
+        name: commercial_id.clone(),
+        version: release.version.clone(),
+        tag: release.version,
+        published_at: None,
+        notes_url: None,
+        artifacts,
+    }))
+}
+
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 async fn install_release(
@@ -1151,17 +1227,36 @@ async fn install_release(
     kind: String,
     commercial_id: Option<String>,
 ) -> Result<InstallResult, String> {
-    let source = match commercial_id {
+    let (source, version, sha256, file_name, kind) = match commercial_id {
         Some(commercial_id) => {
             let stored = read_session(&app)?
                 .ok_or_else(|| "Sign in to Lakeside to download this game.".to_string())?;
-            DownloadSource::Account {
-                base: platform_base(),
-                commercial_id,
-                token: stored.token,
-            }
+            // Paid builds: version, checksum, name and kind come from the
+            // accounts API, never from the webview.
+            let platform =
+                installer::download_platform(std::env::consts::OS, std::env::consts::ARCH)
+                    .ok_or_else(|| "This platform has no Lakeside download.".to_string())?;
+            let release = fetch_account_release(&app, &commercial_id)
+                .await?
+                .ok_or_else(|| "This account does not have a download for this game.".to_string())?;
+            let file = release
+                .files
+                .iter()
+                .find(|file| file.platform == platform)
+                .ok_or_else(|| "No build is published for this system yet.".to_string())?;
+            (
+                DownloadSource::Account {
+                    base: platform_base(),
+                    commercial_id,
+                    token: stored.token,
+                },
+                release.version.clone(),
+                file.sha256.clone(),
+                file.name.clone(),
+                file.installer.clone(),
+            )
         }
-        None => DownloadSource::Url(url),
+        None => (DownloadSource::Url(url), version, sha256, file_name, kind),
     };
     let installed_version = detect_installed_version(&app, &product_id);
 
@@ -1433,6 +1528,7 @@ pub fn run() {
             open_external,
             begin_sign_in,
             get_release_manifest,
+            account_release,
             is_installed,
             install_release,
             installed_products,

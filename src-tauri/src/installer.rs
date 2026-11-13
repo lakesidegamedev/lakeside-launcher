@@ -238,6 +238,92 @@ pub fn exe_from_display_icon(value: &str) -> Option<String> {
     }
 }
 
+/// One downloadable file from the accounts downloads API.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AccountFile {
+    pub platform: String,
+    pub name: String,
+    pub size: Option<u64>,
+    pub sha256: String,
+    pub installer: String,
+}
+
+/// `GET /account/api/downloads/<product>` answer.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AccountRelease {
+    pub version: String,
+    pub entitled: bool,
+    pub files: Vec<AccountFile>,
+}
+
+/// Parse the downloads API body. Files without a valid platform key or a
+/// 64 digit sha256 are dropped, so nothing unverifiable can be installed.
+/// Returns None when there is no version or no usable file (not published).
+pub fn parse_account_release(bytes: &[u8]) -> Option<AccountRelease> {
+    let value: serde_json::Value = serde_json::from_slice(bytes).ok()?;
+    let version = value.get("version")?.as_str()?.trim().to_string();
+    if version.is_empty() || version.len() > 64 {
+        return None;
+    }
+    let entitled = value
+        .get("entitled")
+        .and_then(|entitled| entitled.as_bool())
+        .unwrap_or(false);
+    let files: Vec<AccountFile> = value
+        .get("files")?
+        .as_array()?
+        .iter()
+        .filter_map(|file| {
+            let platform = file.get("platform")?.as_str()?;
+            let name = file.get("name")?.as_str()?;
+            let sha256 = file.get("sha256")?.as_str()?.trim().to_ascii_lowercase();
+            let installer = file.get("installer")?.as_str()?;
+            if !valid_platform_key(platform)
+                || sha256.len() != 64
+                || !sha256.chars().all(|c| c.is_ascii_hexdigit())
+            {
+                return None;
+            }
+            Some(AccountFile {
+                platform: platform.to_string(),
+                name: name.to_string(),
+                size: file.get("size").and_then(|size| size.as_u64()),
+                sha256,
+                installer: installer.to_string(),
+            })
+        })
+        .collect();
+    if files.is_empty() {
+        return None;
+    }
+    Some(AccountRelease {
+        version,
+        entitled,
+        files,
+    })
+}
+
+/// The launcher's own release-artifact key for an accounts platform key.
+pub fn manifest_key_for_platform(platform: &str) -> Option<&'static str> {
+    match platform {
+        "windows-x86_64" => Some("windows-x64"),
+        "linux-x86_64" => Some("linux-x64"),
+        "macos-universal" => Some("macos-arm64"),
+        _ => None,
+    }
+}
+
+/// `GET <base>/account/api/downloads/<productId>`.
+pub fn account_release_url(base: &str, commercial_id: &str) -> Result<String, String> {
+    if !valid_id(commercial_id) {
+        return Err("Invalid product for the release lookup.".to_string());
+    }
+    Ok(format!(
+        "{}/account/api/downloads/{commercial_id}",
+        base.trim_end_matches('/')
+    ))
+}
+
 /// Pull `code` out of the handoff response. Errors never echo the body.
 pub fn parse_handoff_code(bytes: &[u8]) -> Option<String> {
     let value: serde_json::Value = serde_json::from_slice(bytes).ok()?;
@@ -269,6 +355,29 @@ mod tests {
     }
 
     use super::*;
+
+    #[test]
+    fn parses_the_downloads_api_and_drops_unverifiable_files() {
+        let body = br#"{"product":"corporate-warfare","version":"2.0.0","entitled":true,"files":[
+            {"platform":"windows-x86_64","name":"CorporateWarfare-2.0.0-setup.exe","size":10,"sha256":"AB12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12","installer":"inno","url":"x"},
+            {"platform":"linux-x86_64","name":"cw.AppImage","size":11,"sha256":"short","installer":"appimage"},
+            {"platform":"../evil","name":"x","sha256":"ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12","installer":"inno"}]}"#;
+        let parsed = parse_account_release(body).expect("release");
+        assert_eq!(parsed.version, "2.0.0");
+        assert!(parsed.entitled);
+        assert_eq!(parsed.files.len(), 1);
+        assert_eq!(parsed.files[0].installer, "inno");
+        assert!(parsed.files[0].sha256.chars().all(|c| !c.is_ascii_uppercase()));
+        assert!(parse_account_release(br#"{"version":"2.0.0","files":[]}"#).is_none());
+        assert!(parse_account_release(b"not json").is_none());
+        assert_eq!(manifest_key_for_platform("windows-x86_64"), Some("windows-x64"));
+        assert_eq!(manifest_key_for_platform("beos"), None);
+        assert_eq!(
+            account_release_url("https://lakesidegames.net/", "corporate-warfare").as_deref(),
+            Ok("https://lakesidegames.net/account/api/downloads/corporate-warfare")
+        );
+        assert!(account_release_url("https://lakesidegames.net", "../x").is_err());
+    }
 
     #[test]
     fn parses_installer_kinds_and_platform_support() {
