@@ -29,15 +29,20 @@ async function shoot(page, name) {
   }
 }
 
-async function connect(port, tries = 30) {
+async function connect(port, tries = 10) {
+  let last = "";
   for (let i = 0; i < tries; i++) {
     try {
-      return await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
-    } catch {
+      const info = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json();
+      if (i === 0) console.log(`cdp ${port}: ${info.Browser}`);
+      return await chromium.connectOverCDP(info.webSocketDebuggerUrl);
+    } catch (e) {
+      last = String(e.message).split("\n")[0];
+      if (i % 5 === 0) console.log(`cdp ${port} attempt ${i}: ${last}`);
       await sleep(2000);
     }
   }
-  throw new Error(`could not connect to CDP port ${port}`);
+  throw new Error(`could not connect to CDP port ${port}: ${last}`);
 }
 
 async function main() {
