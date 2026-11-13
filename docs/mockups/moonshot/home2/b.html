@@ -1,0 +1,61 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Home B: filmstrip</title><link rel="stylesheet" href="launcher.css"><link rel="stylesheet" href="home2.css"><style>
+.show{height:clamp(500px,66vh,690px);overflow:visible;background:none}
+.stage{position:absolute;left:0;right:0;top:0;height:calc(100% - 62px);overflow:hidden}
+.stage .slide{position:absolute}
+.scrim{background:linear-gradient(90deg,rgba(20,31,58,.97) 0%,rgba(20,31,58,.88) 30%,rgba(20,31,58,.4) 58%,rgba(20,31,58,0) 78%),linear-gradient(0deg,var(--ground) 0%,rgba(20,31,58,.85) 22%,rgba(20,31,58,0) 52%)}
+.txt{left:clamp(28px,4vw,64px);bottom:clamp(92px,15vh,128px);max-width:min(700px,60%)}
+.stage .pg{display:none}
+.strip{position:absolute;left:16px;right:16px;bottom:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;align-items:end;z-index:4;height:clamp(104px,15vh,132px)}
+.tile{position:relative;height:100%;border:1px solid var(--line);border-radius:4px;overflow:hidden;background-color:var(--plate);background-repeat:no-repeat;transition:transform .3s ease,border-color .3s;filter:brightness(.8) saturate(.9)}
+.tile::before{content:"";position:absolute;inset:0;background:linear-gradient(0deg,rgba(20,31,58,.96) 0%,rgba(20,31,58,.7) 48%,rgba(20,31,58,.1) 100%)}
+.tile::after{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:var(--ac)}
+.tile .lb{position:absolute;left:12px;right:10px;bottom:10px}
+.tile small{display:block;font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--ac);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile b{display:block;font-size:clamp(13px,1.1vw,15px);line-height:1.2;font-weight:600}
+.tile:hover{filter:none}
+.tile.on{transform:translateY(-16px);border-color:var(--brass);filter:none;box-shadow:0 12px 26px rgba(8,12,26,.55)}
+.tile .pg{height:4px;background:rgba(244,246,251,.18);z-index:2}
+.tile:not(.on) .pg{display:none}
+</style></head><body class="h2"><div class="top"><div class="brand"><img src="lakeside-mark.svg" alt="">Lakeside Games</div>
+<a class="tab on">Home</a><a class="tab">Library</a><a class="tab">Store</a><a class="tab">Downloads<span class="n">2</span></a><a class="tab">News</a>
+<a class="acct"><span class="av">K</span>kepler</a></div><main class="scroll"><section class="show" aria-roledescription="carousel" aria-label="What is new"><div class="stage"><article class="slide ahdc on" style="--pos:62% 50%" role="group" aria-roledescription="slide" aria-label="1">
+<div class="art" style="background-image:url(art/ahd.jpg)"></div><div class="scrim"></div>
+<div class="txt"><div class="toprow"><div class="wm ahd">A House Divided <span class="v">1.20</span></div><span class="kick"><span class="dot"></span>Opens Sunday</span></div><h2 class="hl">The 2027 world</h2><p class="lead">Opens Sunday November 15, 5:00 PM Eastern.</p><div class="cd" data-cd="2026-11-15T22:00:00Z"><div><b class="d">2</b><span>days</span></div><div><b class="h">16</b><span>hours</span></div><div><b class="m">00</b><span>min</span></div><div><b class="s">00</b><span>sec</span></div></div><div class="acts"><a class="btn p big" href="#">Install</a><a class="btn quiet big" href="#">Open the post</a></div></div>
+<div class="pg"><i></i></div></article><article class="slide lkc" style="--pos:72% 50%" role="group" aria-roledescription="slide" aria-label="2">
+<div class="art" style="background-image:url(art/alpha.jpg)"></div><div class="scrim"></div>
+<div class="txt"><div class="toprow"><div class="wm lk"><img src="lakeside-mark.svg" alt="">Lakeside Games</div><span class="kick"><span class="dot"></span>Studio news</span></div><h2 class="hl">Our games are leaving alpha</h2><p class="lead">Everything is free until Monday 5:00 PM Eastern.</p><div class="acts"><a class="btn p big" href="#">Play free</a><a class="btn quiet big" href="#">Open the post</a></div></div>
+<div class="pg"><i></i></div></article><article class="slide cwc" style="--pos:62% 50%" role="group" aria-roledescription="slide" aria-label="3">
+<div class="art" style="background-image:url(art/cw.jpg)"></div><div class="scrim"></div>
+<div class="txt"><div class="toprow"><div class="wm cw">Corporate Warfare <span class="v">2.0</span></div><span class="kick"><span class="dot"></span>New release</span></div><h2 class="hl">Rivals</h2><p class="lead">3D city maps, plant models and live goods markets.</p><div class="acts"><a class="btn p big" href="#">Install</a><a class="btn quiet big" href="#">Open the post</a></div></div>
+<div class="pg"><i></i></div></article><article class="slide movc" style="--pos:64% 50%" role="group" aria-roledescription="slide" aria-label="4">
+<div class="art" style="background-image:url(art/mov.jpg)"></div><div class="scrim"></div>
+<div class="txt"><div class="toprow"><div class="wm mov">Margin of Victory <span class="v">2.0</span></div><span class="kick"><span class="dot"></span>New release</span></div><h2 class="hl">121 elections, 14 countries</h2><p class="lead">Run a real campaign, turn by turn. 15 elections are free forever.</p><div class="acts"><a class="btn p big" href="#">Play free</a><a class="btn quiet big" href="#">Open the post</a></div></div>
+<div class="pg"><i></i></div></article><article class="slide gcc" style="--pos:64% 50%" role="group" aria-roledescription="slide" aria-label="5">
+<div class="art" style="background-image:url(art/gc.jpg)"></div><div class="scrim"></div>
+<div class="txt"><div class="toprow"><div class="wm gc">Grand Century</div><span class="kick"><span class="dot"></span>Early access</span></div><h2 class="hl">Early access, free in your browser</h2><p class="lead">Take a nation from 1700 to 1945. Nothing to download.</p><div class="acts"><a class="btn p big" href="#">Play free</a><a class="btn quiet big" href="#">Open the post</a></div></div>
+<div class="pg"><i></i></div></article></div><nav class="strip" aria-label="Slides"><button class="tile ahdc on" data-go="0" style="background-image:url(art/ahd.jpg);background-size:170%;background-position:62% 50%" aria-label="Show: The 2027 world opens Sunday"><span class="lb"><small>A House Divided 1.20</small><b>The 2027 world opens Sunday</b></span><span class="pg"><i></i></span></button><button class="tile lkc" data-go="1" style="background-image:url(art/alpha.jpg);background-size:130%;background-position:80% 50%" aria-label="Show: Everything is free until Monday"><span class="lb"><small>Studio news</small><b>Everything is free until Monday</b></span><span class="pg"><i></i></span></button><button class="tile cwc" data-go="2" style="background-image:url(art/cw.jpg);background-size:190%;background-position:60% 40%" aria-label="Show: Rivals"><span class="lb"><small>Corporate Warfare 2.0</small><b>Rivals</b></span><span class="pg"><i></i></span></button><button class="tile movc" data-go="3" style="background-image:url(art/mov.jpg);background-size:160%;background-position:64% 50%" aria-label="Show: 121 elections, 14 countries"><span class="lb"><small>Margin of Victory 2.0</small><b>121 elections, 14 countries</b></span><span class="pg"><i></i></span></button><button class="tile gcc" data-go="4" style="background-image:url(art/gc.jpg);background-size:170%;background-position:62% 50%" aria-label="Show: Early access, free in your browser"><span class="lb"><small>Grand Century</small><b>Early access, free in your browser</b></span><span class="pg"><i></i></span></button></nav></section><div class="below">
+<div><h2>Jump back in<a>All 5 games in Library</a></h2><div class="jb"><div class="jt ahdc"><div class="jart" style="background-image:url(art/ahd.jpg);background-position:58% 40%;background-size:240%"></div><div class="jb2"><b>A House Divided</b><small>Last played <em>today</em></small><small>41 h played · <span class="upd">1.19.0 ready</span></small></div><div class="jact"><a class="btn p sm">Update</a></div></div><div class="jt movc"><div class="jart" style="background-image:url(art/mov.jpg);background-position:60% 50%;background-size:240%"></div><div class="jb2"><b>Margin of Victory</b><small>Last played <em>2 days ago</em></small><small>12 h played</small></div><div class="jact"><a class="btn p sm">Play</a></div></div><div class="jt cwc"><div class="jart" style="background-image:url(art/cw.jpg);background-position:55% 60%;background-size:240%"></div><div class="jb2"><b>Corporate Warfare</b><small>Last played <em>Nov 9</em></small><small>6 h played</small></div><div class="jact"><a class="btn p sm">Play</a></div></div></div></div>
+<div class="cols2"><div><h2>What changed<a>Release notes</a></h2><table class="feed">
+<tr><td><span class="g2"><span class="dot" style="background:var(--cw)"></span>Corporate Warfare</span></td><td><span class="tag">2.0</span></td><td class="s">Rivals: 3D city maps, plant models and live goods markets.</td><td class="d">Nov 12</td></tr>
+<tr><td><span class="g2"><span class="dot" style="background:var(--mov)"></span>Margin of Victory</span></td><td><span class="tag">2.0</span></td><td class="s">121 elections across 14 countries.</td><td class="d">Nov 12</td></tr>
+<tr><td><span class="g2"><span class="dot" style="background:var(--ahd)"></span>A House Divided</span></td><td><span class="tag">1.19</span></td><td class="s">Every sale has a buyer.</td><td class="d">Nov 10</td></tr>
+<tr><td><span class="g2"><span class="dot" style="background:var(--brass)"></span>Launcher</span></td><td><span class="tag">0.6.1</span></td><td class="s">Windows sign-in opens the full link in your browser.</td><td class="d">Nov 13</td></tr>
+<tr><td><span class="g2"><span class="dot" style="background:var(--gc)"></span>Grand Century</span></td><td><span class="tag">1.7</span></td><td class="s">The Long Century.</td><td class="d">Sep 2</td></tr></table></div>
+<div><h2>Your account<a>Manage</a></h2><div class="acc"><div class="ah"><span class="av">K</span><div><b>kepler</b><small>Supporter+ · $9.99 a month</small></div><a class="btn sm">Account</a></div>
+<ul><li><span class="dot" style="background:var(--ok)"></span>Every Lakeside game, all paid access</li><li><span class="dot" style="background:var(--ok)"></span>A House Divided single-player and sandbox</li><li><span class="dot" style="background:var(--ok)"></span>Every Margin of Victory pack</li><li><span class="dot" style="background:var(--warn)"></span>Free for everyone until Monday 5:00 PM ET</li></ul></div></div></div></div></main><div class="status"><span><b>Downloading</b> A House Divided 1.19.0</span><span class="bar"><i style="width:62%"></i></span><span>62%, 8.4 MB/s</span><span class="muted">1 more waiting</span><span class="sp">Downloads</span></div><script>
+(function(){
+var q=new URLSearchParams(location.search),root=document.documentElement,show=document.querySelector(".show");
+var sl=[].slice.call(show.querySelectorAll(".slide")),ctl=[].slice.call(show.querySelectorAll("[data-go]")),i=0;
+var T=q.get("t");if(T!==null){root.classList.add("frozen");root.style.setProperty("--t",T)}
+function go(n){i=(n+sl.length)%sl.length;sl.forEach(function(s,k){s.classList.toggle("on",k==i)});ctl.forEach(function(c){c.classList.toggle("on",+c.dataset.go==i);c.setAttribute("aria-current",+c.dataset.go==i)})}
+show.addEventListener("animationend",function(e){if(e.target.matches(".pg i")&&e.target.closest(".on"))go(i+1)});
+ctl.forEach(function(c){c.addEventListener("click",function(){go(+c.dataset.go)})});
+show.tabIndex=0;show.addEventListener("keydown",function(e){if(e.key=="ArrowRight"||e.key=="ArrowDown")go(i+1);if(e.key=="ArrowLeft"||e.key=="ArrowUp")go(i-1)});
+var m=q.get("slide");if(m)go(+m-1);
+function pad(n){return n<10?"0"+n:""+n}
+function tick(){document.querySelectorAll("[data-cd]").forEach(function(el){var ms=Math.max(0,new Date(el.dataset.cd)-Date.now()),s=Math.floor(ms/1000);
+var v={d:Math.floor(s/86400),h:pad(Math.floor(s%86400/3600)),m:pad(Math.floor(s%3600/60)),s:pad(s%60)};for(var k in v){var n=el.querySelector("."+k);if(n)n.textContent=v[k]}})}
+tick();setInterval(tick,1000);
+if(q.get("scroll"))document.querySelector("main").scrollTop=1e5;
+})();
+</script></body></html>

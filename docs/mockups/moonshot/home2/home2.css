@@ -1,0 +1,73 @@
+/* Home, second pass. Shared by directions A, B, C. Chrome comes from launcher.css. */
+:root{--t:0;--dur:8s}
+html,body{width:100%;height:100vh;overflow:hidden}
+body.h2{display:flex;flex-direction:column}
+main.scroll{flex:1;min-height:0;padding:0;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:var(--plate-2) var(--ground)}
+.top .tab{white-space:nowrap}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;text-align:left}
+button:focus-visible,.btn:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+/* ---------- showcase ---------- */
+.show{position:relative;overflow:hidden;background:var(--ground)}
+.slide{position:absolute;inset:0;opacity:0;visibility:hidden;transition:opacity .55s ease,visibility .55s;overflow:hidden}
+.slide.on{opacity:1;visibility:visible}
+.art{position:absolute;inset:0;background-size:cover;background-position:var(--pos,60% 50%);transform-origin:var(--pos,60% 50%)}
+.slide.on .art{animation:kb var(--dur) linear both;animation-delay:calc(var(--t) * -1s)}
+@keyframes kb{from{transform:scale(1)}to{transform:scale(1.04)}}
+.scrim{position:absolute;inset:0;pointer-events:none}
+.txt{position:absolute;display:flex;flex-direction:column;align-items:flex-start}
+.slide.on .txt>*{animation:rise .6s cubic-bezier(.2,.7,.2,1) both;animation-delay:calc(var(--k,0) * .09s - var(--t) * 1s)}
+.txt>:nth-child(1){--k:0}.txt>:nth-child(2){--k:1}.txt>:nth-child(3){--k:2}.txt>:nth-child(4){--k:3}.txt>:nth-child(5){--k:4}
+@keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+.pg{position:absolute;left:0;right:0;bottom:0;height:3px;background:rgba(244,246,251,.14);pointer-events:none}
+.pg i{display:block;height:100%;width:0;background:var(--brass)}
+.on>.pg i,.on .pg i,.pg.live i{animation:fill var(--dur) linear forwards;animation-delay:calc(var(--t) * -1s)}
+@keyframes fill{from{width:0}to{width:100%}}
+.show:hover *,.show:focus-within *,.frozen *{animation-play-state:paused!important}
+.wm{display:flex;align-items:center;gap:11px;font-weight:700;font-size:14px;letter-spacing:.2em;text-transform:uppercase;color:var(--text);white-space:nowrap}
+.wm .v{letter-spacing:.06em;font-size:12.5px;border:1px solid var(--ac);color:var(--ac);border-radius:3px;padding:1px 7px;line-height:17px}
+.wm.ahd::before{content:"";width:26px;height:4px;background:var(--ac)}
+.wm.mov::before{content:"";width:13px;height:13px;background:var(--ac);border-radius:2px}
+.wm.cw::before{content:"";width:13px;height:13px;border:3px solid var(--ac);border-radius:2px}
+.wm.gc::before,.wm.gc::after{content:"";width:16px;height:2px;background:var(--ac)}
+.wm.gc{gap:9px}
+.wm.lk img{width:20px;height:20px}
+.kick{display:inline-flex;align-items:center;gap:7px;font-size:11.5px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:2px 9px;background:rgba(20,31,58,.5);white-space:nowrap}
+.kick .dot{background:var(--ac);width:7px;height:7px}
+.toprow{display:flex;align-items:center;gap:14px;flex-wrap:nowrap}
+.hl{font-size:clamp(44px,4.4vw,64px);line-height:1.02;font-weight:700;letter-spacing:-.02em;text-transform:none;margin:14px 0 12px;color:var(--text);text-wrap:balance}
+.lead{font-size:clamp(15px,1.3vw,18px);line-height:1.35;color:var(--text);max-width:34em;opacity:.92}
+.acts{display:flex;gap:12px;margin-top:20px}
+.btn.big{padding:12px 28px;font-size:clamp(15px,1.25vw,17px);line-height:1.2}
+.btn.quiet{background:rgba(20,31,58,.55);border-color:rgba(244,246,251,.38);color:var(--text)}
+.cd{display:flex;gap:8px;margin-top:16px}
+.cd div{min-width:62px;border:1px solid rgba(244,246,251,.28);background:rgba(20,31,58,.72);border-radius:4px;padding:5px 9px 4px;text-align:center}
+.cd b{display:block;font-size:26px;line-height:1.1;font-weight:700;font-variant-numeric:tabular-nums}
+.cd span{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-2)}
+.ahdc{--ac:var(--ahd)}.cwc{--ac:var(--cw)}.movc{--ac:var(--mov)}.gcc{--ac:var(--gc)}.lkc{--ac:var(--brass)}
+/* ---------- below the showcase ---------- */
+.below{padding:16px 16px 22px;display:grid;gap:14px}
+.below h2{margin:0 0 7px;display:flex;align-items:baseline;gap:10px}
+.below h2 a{margin-left:auto;font-size:12px;color:var(--text-3);text-transform:none;letter-spacing:0;font-weight:500}
+.jb{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.jt{display:grid;grid-template-columns:clamp(120px,11vw,170px) minmax(0,1fr) auto;align-items:stretch;background:var(--plate);border:1px solid var(--line);border-radius:4px;overflow:hidden;min-height:92px}
+.jt .jart{background-size:cover;border-right:3px solid var(--ac)}
+.jt .jb2{padding:10px 12px;display:flex;flex-direction:column;justify-content:center;gap:2px;min-width:0}
+.jt b{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.jt small{color:var(--text-3);font-size:12.5px;white-space:nowrap}
+.jt small em{font-style:normal;color:var(--text-2)}
+.jt .jact{display:flex;align-items:center;padding-right:12px}
+.cols2{display:grid;grid-template-columns:minmax(0,1fr) clamp(300px,26vw,380px);gap:12px;align-items:start}
+.feed td{padding:7px 11px;font-size:13px}
+.feed td.s{white-space:normal;color:var(--text-2)}
+.feed td.d{color:var(--text-3);text-align:right}
+.feed .g2{display:flex;align-items:center;gap:8px;font-weight:600}
+.acc{background:var(--plate);border:1px solid var(--line);border-radius:4px}
+.acc .ah{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--line)}
+.acc .av{width:32px;height:32px;font-size:14px;background:var(--plate-2)}
+.acc .ah b{font-size:15px;display:block;line-height:1.2}
+.acc .ah small{color:var(--text-3);font-size:12.5px}
+.acc .ah .btn{margin-left:auto}
+.acc ul{list-style:none;padding:9px 12px;display:grid;gap:5px;font-size:13px;color:var(--text-2)}
+.acc li{display:flex;gap:8px;align-items:center}
+.acc li .dot{width:7px;height:7px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.pg{display:none}}
