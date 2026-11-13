@@ -1,8 +1,6 @@
 name: signin e2e
 
 on:
-  push:
-    branches: [ci/signin-e2e]
   workflow_dispatch:
     inputs:
       version:
