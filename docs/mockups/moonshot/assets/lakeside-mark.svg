@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="42 42 236 236" role="img" aria-labelledby="lsg-title lsg-desc">
+  <title id="lsg-title">Lakeside Games: offset sunset and irregular rounded lake ribs</title>
+  <desc id="lsg-desc">A violet-to-coral half-disc sky, golden offset sun, and unevenly spaced teal rounded lake ribbons arranged into a broken circular silhouette.</desc>
+  <defs>
+    <linearGradient id="lsg-sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#665498"/>
+      <stop offset="0.56" stop-color="#C5658B"/>
+      <stop offset="1" stop-color="#FF9961"/>
+    </linearGradient>
+    <clipPath id="lsg-disc"><circle cx="160" cy="160" r="116"/></clipPath>
+    <clipPath id="lsg-top"><rect x="40" y="40" width="240" height="111"/></clipPath>
+  </defs>
+  <!-- Transparent canvas, fully editable vector objects -->
+  <g clip-path="url(#lsg-disc)">
+    <path d="M44 151 A116 116 0 0 1 276 151 Z" fill="url(#lsg-sky)"/>
+    <circle cx="187" cy="150" r="42" fill="#FFDA83" clip-path="url(#lsg-top)"/>
+    <!-- Separately rounded ribs; intentionally unequal lengths, positions and gaps -->
+    <rect x="31" y="163" width="193" height="15" rx="7.5" fill="#58C7CE"/>
+    <rect x="235" y="163" width="49" height="15" rx="7.5" fill="#58C7CE"/>
+    <rect x="73" y="185" width="218" height="11" rx="5.5" fill="#48B3BF"/>
+    <rect x="38" y="203" width="135" height="17" rx="8.5" fill="#399FAC"/>
+    <rect x="184" y="203" width="88" height="17" rx="8.5" fill="#399FAC"/>
+    <rect x="83" y="229" width="184" height="12" rx="6" fill="#318A9A"/>
+    <rect x="53" y="248" width="104" height="10" rx="5" fill="#277987"/>
+    <rect x="169" y="248" width="80" height="10" rx="5" fill="#277987"/>
+    <rect x="117" y="265" width="88" height="11" rx="5.5" fill="#236A77"/>
+  </g>
+</svg>
