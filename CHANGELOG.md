@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.7.0
+
+- New Home. A full-bleed showcase of what is new, with one large action and a
+  quiet second one per slide, key art built from real screenshots, and a thin
+  progress bar. The art drifts slowly and the text rises in; hover, keyboard
+  focus and a hidden window hold it still, and reduced motion turns all of it
+  off. Left and Right change slide, Enter runs the main action.
+- Two layouts, chosen from the feed. While a live event is on (a countdown, an
+  offer or the free weekend) Home shows the showcase with one or two live panels
+  beside it. With no live event it shows the showcase with a strip of five
+  labelled tiles under it. The switch happens by itself when an event starts or
+  its end time passes, with no restart.
+- Live events come from a new `events` list in the home feed. Events outside
+  their window are ignored even if the feed still lists them. The free-weekend
+  event also needs the store's live free-access answer to be on, and it takes
+  its end time from that answer, so Home never advertises free access the store
+  is not giving. Feeds without `events` keep working.
+- The main button follows your machine: Install, Update or Play, falling back to
+  the store page when the game is not available to you.
+- Below the showcase: Jump back in (wide tiles with art, last played, Play or
+  Update), What changed (game, version, date and one sentence from the release
+  notes; version and date only when the notes have no clean sentence) and a small
+  account strip.
+- The feed can name any of the five built-in plates or point at an image on
+  lakesidegames.net to override one. Slide text, buttons, kicker, version badge
+  and picture focus are all feed fields; unknown fields are ignored.
+- The Update-ready slide is gone from the showcase. Updates show in Jump back in.
+
 ## 0.6.1
 
 - Free weekend: while the studio free-access switch is on, signed-in players see

@@ -11,32 +11,41 @@ fs.mkdirSync(shots, { recursive: true });
 const PORT = 4173;
 const base = `http://127.0.0.1:${PORT}/`;
 
-const homeFeed = JSON.stringify({
+const slide = (id, game, headline, extra = {}) => ({
+  id,
+  kind: "release",
+  game,
+  headline,
+  line: "A line of text.",
+  art: "bundled",
+  action: { type: "store", target: "/store/corporate-warfare", label: "Open store page" },
+  starts: "2020-01-01T00:00:00Z",
+  ends: "2099-01-01T00:00:00Z",
+  priority: 1,
+  ...extra,
+});
+const slides = [
+  slide("smoke-release", "cw", "Corporate Warfare 2.0 is out", { badge: "2.0", kicker: "Out now" }),
+  slide("smoke-mov", "mov", "121 elections in 14 countries", { priority: 2, tile: "121 elections" }),
+  slide("smoke-free", "studio", "Everything is free to play", { kind: "free", priority: 3, tile: "Free this weekend", art: "bundled:alpha" }),
+];
+// Layout B: no events list at all, like a feed from before 0.7.0.
+const feedWithoutEvents = JSON.stringify({ version: 1, slides });
+// Layout C: one countdown that is live until 2099.
+const feedWithEvent = JSON.stringify({
   version: 1,
-  slides: [
+  slides,
+  events: [
     {
-      id: "smoke-release",
-      kind: "release",
-      game: "cw",
-      headline: "Corporate Warfare 2.0 is out",
-      line: "$14.99, or included with Supporter+.",
-      art: "bundled",
-      action: { type: "store", target: "/store/corporate-warfare" },
-      starts: "2020-01-01T00:00:00Z",
-      ends: "2099-01-01T00:00:00Z",
-      priority: 1,
-    },
-    {
-      id: "smoke-free",
-      kind: "free",
-      game: "ahd",
-      headline: "Everything is free to play while A House Divided is paused",
-      line: "Every Lakeside game is open to everyone while the pause lasts.",
-      art: "bundled",
-      action: { type: "store", target: "/store" },
-      starts: "2020-01-01T00:00:00Z",
-      ends: "2099-01-01T00:00:00Z",
-      priority: 2,
+      id: "smoke-countdown",
+      kind: "countdown",
+      accent: "ahd",
+      headline: "A House Divided 1.20: the 2027 world",
+      line: "Opens Sunday at 5:00 PM Eastern.",
+      art: "bundled:ahd",
+      startsAt: "2020-01-01T00:00:00Z",
+      endsAt: "2099-01-01T00:00:00Z",
+      target: "2099-01-01T00:00:00Z",
     },
   ],
 });
@@ -65,12 +74,12 @@ try {
   await waitForServer();
   const browser = await chromium.launch({ channel: "chrome" });
 
-  async function open(init) {
+  async function open(init, feedBody = feedWithoutEvents) {
     const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, reducedMotion: "reduce" });
     const page = await context.newPage();
     const cors = { "access-control-allow-origin": "*" };
     await page.route("**/download/launcher/home.json", (r) =>
-      r.fulfill({ status: 200, contentType: "application/json", headers: cors, body: homeFeed }));
+      r.fulfill({ status: 200, contentType: "application/json", headers: cors, body: feedBody }));
     await page.route("**/account/api/free-access", (r) =>
       r.fulfill({ status: 200, contentType: "application/json", headers: cors, body: '{"on":true}' }));
     await page.route("**/account/api/catalog", (r) => r.abort());
@@ -84,19 +93,43 @@ try {
 const text = async (page) => (await page.locator("body").innerText()).replace(/\s+/g, " ").toLowerCase();
 const has = (body, wanted) => body.includes(wanted.toLowerCase());
 
+  // Layout B: the filmstrip, with five-tile strip and no live panels.
   let page = await open();
-  await page.waitForSelector(".hm-car", { timeout: 15000 });
+  await page.waitForSelector(".show", { timeout: 15000 });
   let body = await text(page);
   check(await page.locator("nav.tabs .tab").first().innerText() === "Home", "Home is the first tab");
   check(await page.locator("nav.tabs .tab.on").innerText() === "Home", "Home is the default screen");
-  check(has(body, "Corporate Warfare 2.0 is out"), "Home carousel shows the first slide");
-  check(has(body, "Continue playing"), "Home lists Continue playing");
-  // The free-access answer arrives after first paint; wait for its slide to join the carousel,
-  // then jump to it with its dot (the demo library also adds an Update slide).
-  await page.waitForSelector(".hm-dot[aria-label$='Free to play']", { timeout: 15000, state: "attached" });
-  await page.locator(".hm-dot[aria-label$='Free to play']").click();
-  check(has(await text(page), "Everything is free to play while A House Divided is paused"), "free-to-play slide shows while the switch is on");
+  check((await page.locator(".show").getAttribute("data-layout")) === "film", "No events: Home shows the filmstrip layout");
+  check((await page.locator(".show .live").count()) === 0, "No events: no live panels");
+  check(has(body, "Corporate Warfare 2.0 is out"), "Home showcase shows the first slide");
+  check(has(body, "Jump back in"), "Home has Jump back in");
+  check(has(body, "What changed"), "Home has What changed");
+  check((await page.locator(".show .tile").count()) >= 2, "Filmstrip tiles are shown");
+  // The free-access answer arrives after first paint; wait for its slide to join, then open it by its tile.
+  await page.waitForSelector(".show .tile[aria-label='Show: Free this weekend']", { timeout: 15000, state: "attached" });
+  await page.locator(".show .tile[aria-label='Show: Free this weekend']").click();
+  check(has(await text(page), "Everything is free to play"), "free-to-play slide shows while the switch is on");
+  // Keyboard: focus the showcase, Right goes to the next slide (wraps), Left goes back.
+  await page.locator(".show").focus();
+  const current = async () => page.locator(".show .tile[aria-current='true']").getAttribute("aria-label");
+  const before = await current();
+  await page.keyboard.press("ArrowRight");
+  const after = await current();
+  check(before !== after, "Right arrow changes slide");
+  await page.keyboard.press("ArrowLeft");
+  check((await current()) === before, "Left arrow goes back");
   await shot(page, "home");
+  await page.context().close();
+
+  // Layout C: a live event shows its panel beside the showcase.
+  page = await open(undefined, feedWithEvent);
+  await page.waitForSelector(".show[data-layout='split']", { timeout: 15000 });
+  body = await text(page);
+  check((await page.locator(".show .live .lp").count()) === 1, "A live event: one live panel");
+  check(has(body, "A House Divided 1.20: the 2027 world"), "The live panel shows the event headline");
+  check((await page.locator(".show .live .cd").count()) === 1, "The countdown event shows its countdown");
+  check((await page.locator(".show .tile").count()) === 0, "A live event: no filmstrip");
+  await shot(page, "home-events");
 
   await page.locator("nav.tabs .tab", { hasText: "Library" }).click();
   await page.waitForSelector("table");

@@ -1,12 +1,27 @@
-// Slide rules for the Home carousel. Pure functions, no React, no network.
+// Slide rules for the Home showcase. Pure functions, no React, no network.
+// A slide is a small poster: key art, a kicker, a headline, one line, one
+// primary action (resolved against what this machine can do) and an optional
+// quiet secondary action. Live events live in events.ts.
 
 export type SlideKind = "release" | "update" | "free" | "pack" | "news";
 export type ActionType = "install" | "update" | "play" | "store" | "news";
 
-export interface SlideAction {
+/** A button the feed asks for. Game actions name a game, site actions a studio page path. */
+export interface Link {
   type: ActionType;
   /** Game id for install, update and play. Site path (starts with "/") for store and news. */
   target: string;
+  label?: string;
+}
+
+export interface SlideAction extends Link {
+  /** Runs instead when the game action cannot run here (for example the game is not owned). */
+  fallback?: Link;
+}
+
+export interface Focus {
+  x: number;
+  y: number;
 }
 
 export interface Slide {
@@ -20,12 +35,23 @@ export interface Slide {
   starts: string;
   ends: string;
   priority: number;
+  kicker?: string;
+  /** Version badge beside the wordmark, for example "2.0". */
+  badge?: string;
+  /** Short title for the filmstrip tile and the showcase tab. */
+  tile?: string;
+  focus?: Focus;
+  secondary?: Link;
+  /** A live event with this id shows the same story in its own panel; the slide waits while it is live. */
+  replacedBy?: string;
 }
 
 export interface HomeFeed {
   version: 1;
   generated?: string;
   slides: unknown[];
+  /** Absent in older feed files: no live events, so the filmstrip layout. */
+  events?: unknown[];
 }
 
 /** What the launcher knows about one game on this machine. */
@@ -45,57 +71,87 @@ export interface PlayerGame {
 export type PlayerState = Readonly<Record<string, PlayerGame>>;
 
 export const BUNDLED_ART = "bundled";
+export const BUNDLED_KEYS: readonly string[] = ["ahd", "cw", "gc", "mov", "alpha"];
 export const MAX_SLIDES = 5;
-export const ADVANCE_MS = 7000;
+/** One slide stays up this long; the progress bar runs for the same time. */
+export const SLIDE_SECONDS = 8;
 export const ART_HOST_ALLOWLIST: readonly string[] = ["lakesidegames.net", "assets.lakesidegames.net"];
 const KINDS: readonly SlideKind[] = ["release", "update", "free", "pack", "news"];
 const ACTIONS: readonly ActionType[] = ["install", "update", "play", "store", "news"];
-const GAMES: readonly string[] = ["ahd", "cw", "gc", "mov", "mf", "studio"];
+export const GAMES: readonly string[] = ["ahd", "cw", "gc", "mov", "mf", "studio"];
 const SITE_PATH = /^\/[A-Za-z0-9\-._~/]*$/;
 
-/** Lower number sorts first. Kind order is fixed; `priority` only orders within a kind. */
-export const KIND_ORDER: Readonly<Record<SlideKind, number>> = {
-  release: 0,
-  update: 1,
-  free: 2,
-  pack: 3,
-  news: 4,
-};
-
-function isStr(v: unknown, max: number): v is string {
-  return typeof v === "string" && v.trim().length > 0 && v.length <= max;
+export function isStr(v: unknown, max: number): v is string {
+  return typeof v === "string" && v.trim().length > 0 && v.length <= max && !/[<>]/.test(v);
 }
-function isDate(v: unknown): v is string {
+export function isDate(v: unknown): v is string {
   return typeof v === "string" && !Number.isNaN(Date.parse(v));
 }
 
 export function isAllowedArt(url: string): boolean {
   try {
     const u = new URL(url);
-    return u.protocol === "https:" && ART_HOST_ALLOWLIST.includes(u.hostname);
+    return u.protocol === "https:" && !u.username && !u.password && ART_HOST_ALLOWLIST.includes(u.hostname);
   } catch {
     return false;
   }
 }
 
-/** Returns a clean Slide, or null when any field fails validation. One bad slide never affects the others. */
+/** `bundled`, `bundled:<key>` for a shipped plate, or an allowlisted https URL. */
+export function isValidArt(art: unknown): art is string {
+  if (!isStr(art, 300)) return false;
+  if (art === BUNDLED_ART) return true;
+  if (art.startsWith("bundled:")) return BUNDLED_KEYS.includes(art.slice("bundled:".length));
+  return isAllowedArt(art);
+}
+
+/** The shipped plate this art value names, or null when it is a URL. "bundled" follows the game. */
+export function bundledKey(art: string, game: string): string | null {
+  if (art === BUNDLED_ART) return game === "studio" ? "alpha" : BUNDLED_KEYS.includes(game) ? game : null;
+  if (art.startsWith("bundled:")) return art.slice("bundled:".length);
+  return null;
+}
+
+export function validateLink(raw: unknown): Link | null {
+  if (!raw || typeof raw !== "object") return null;
+  const a = raw as Record<string, unknown>;
+  if (!ACTIONS.includes(a.type as ActionType) || !isStr(a.target, 200)) return null;
+  const type = a.type as ActionType;
+  const target = a.target;
+  if (type === "store" || type === "news") {
+    if (!SITE_PATH.test(target) || target.startsWith("//") || target.includes("..")) return null;
+  } else if (!GAMES.includes(target) || target === "studio") return null;
+  return { type, target, ...(isStr(a.label, 28) ? { label: a.label } : {}) };
+}
+
+export function validateAction(raw: unknown): SlideAction | null {
+  const link = validateLink(raw);
+  if (!link) return null;
+  const fallback = validateLink((raw as Record<string, unknown>).fallback);
+  return fallback ? { ...link, fallback } : link;
+}
+
+export function validateFocus(raw: unknown): Focus | null {
+  if (!raw || typeof raw !== "object") return null;
+  const f = raw as Record<string, unknown>;
+  const ok = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && n >= 0 && n <= 100;
+  return ok(f.x) && ok(f.y) ? { x: f.x, y: f.y } : null;
+}
+
+/** Returns a clean Slide, or null when any required field fails validation. One bad slide never affects the others. */
 export function validateSlide(raw: unknown): Slide | null {
   if (!raw || typeof raw !== "object") return null;
   const s = raw as Record<string, unknown>;
-  const a = s.action as Record<string, unknown> | undefined;
   if (!isStr(s.id, 80) || !KINDS.includes(s.kind as SlideKind)) return null;
   if (!GAMES.includes(s.game as string)) return null;
-  if (!isStr(s.headline, 70) || !isStr(s.line, 110)) return null;
-  // "bundled" means the art that ships inside the launcher for this game (offline fallback).
-  if (!isStr(s.art, 300) || (s.art !== BUNDLED_ART && !isAllowedArt(s.art))) return null;
-  if (!a || !ACTIONS.includes(a.type as ActionType) || !isStr(a.target, 200)) return null;
-  const type = a.type as ActionType;
-  const target = a.target as string;
-  if (type === "store" || type === "news") {
-    if (!SITE_PATH.test(target) || target.startsWith("//")) return null;
-  } else if (!GAMES.includes(target) || target === "studio") return null;
+  if (!isStr(s.headline, 70) || !isStr(s.line, 130)) return null;
+  if (!isValidArt(s.art)) return null;
+  const action = validateAction(s.action);
+  if (!action) return null;
   if (!isDate(s.starts) || !isDate(s.ends)) return null;
   if (typeof s.priority !== "number" || !Number.isFinite(s.priority)) return null;
+  const secondary = validateLink(s.secondary);
+  const focus = validateFocus(s.focus);
   return {
     id: s.id,
     kind: s.kind as SlideKind,
@@ -103,102 +159,110 @@ export function validateSlide(raw: unknown): Slide | null {
     headline: s.headline,
     line: s.line,
     art: s.art,
-    action: { type, target },
+    action,
     starts: s.starts as string,
     ends: s.ends as string,
     priority: s.priority,
+    ...(isStr(s.kicker, 28) ? { kicker: s.kicker } : {}),
+    ...(isStr(s.badge, 10) ? { badge: s.badge } : {}),
+    ...(isStr(s.tile, 44) ? { tile: s.tile } : {}),
+    ...(focus ? { focus } : {}),
+    ...(secondary ? { secondary } : {}),
+    ...(isStr(s.replacedBy, 80) ? { replacedBy: s.replacedBy } : {}),
   };
 }
 
-/** Can this player do what the button says right now? */
-export function isActionable(slide: Slide, player: PlayerState): boolean {
-  const g = player[slide.action.target];
-  switch (slide.action.type) {
-    case "store":
-    case "news":
-      return true;
-    case "update":
-      return !!g && g.installed && g.updateAvailable;
-    case "play":
-      return !!g && g.playable;
-    case "install":
-      return !!g && !g.installed && g.installable;
-  }
+export interface ResolvedAction {
+  type: ActionType;
+  target: string;
+  label: string;
 }
 
-export function isLive(slide: Slide, now: Date): boolean {
+const SITE_LABEL: Readonly<Record<"store" | "news", string>> = { store: "Open store page", news: "Read the post" };
+
+/** A site button, always available. */
+export function siteAction(link: Link): ResolvedAction {
+  const type = link.type === "news" ? "news" : "store";
+  return { type, target: link.target, label: link.label ?? SITE_LABEL[type] };
+}
+
+/**
+ * What the primary button does on this machine. A game action turns into
+ * Update, Play or Install depending on what is installed and owned; when none
+ * of those can run, the feed's fallback (usually the store page) is used.
+ * Null means the slide has nothing to offer here and is dropped.
+ */
+export function resolveAction(action: SlideAction, player: PlayerState): ResolvedAction | null {
+  if (action.type === "store" || action.type === "news") return siteAction(action);
+  const g = player[action.target];
+  if (g) {
+    if (g.installed && g.updateAvailable) return { type: "update", target: action.target, label: "Update" };
+    if (g.playable) {
+      return { type: "play", target: action.target, label: action.type === "play" && action.label ? action.label : "Play" };
+    }
+    if (!g.installed && g.installable) {
+      return { type: "install", target: action.target, label: action.type === "install" && action.label ? action.label : "Install" };
+    }
+  }
+  return action.fallback ? siteAction(action.fallback) : null;
+}
+
+/** The quiet second button, unless it would do the same thing as the first. */
+export function secondaryFor(primary: ResolvedAction, link: Link | undefined): ResolvedAction | null {
+  if (!link) return null;
+  const second = siteAction(link);
+  return second.type === primary.type && second.target === primary.target ? null : second;
+}
+
+export function isLive(window: { starts: string; ends: string }, now: Date): boolean {
   const t = now.getTime();
-  return Date.parse(slide.starts) <= t && t < Date.parse(slide.ends);
+  return Date.parse(window.starts) <= t && t < Date.parse(window.ends);
 }
 
-/** The Update slide is built here, never from the feed: only the launcher knows what is installed. */
-export function localUpdateSlides(player: PlayerState, artFor: (game: string) => string, now: Date): Slide[] {
-  const out: Slide[] = [];
-  for (const [game, g] of Object.entries(player)) {
-    if (!g.installed || !g.updateAvailable || !g.latestVersion) continue;
-    const name = g.displayName ?? game;
-    out.push({
-      id: `update-${game}-${g.latestVersion}`,
-      kind: "update",
-      game,
-      headline: `${name} ${g.latestVersion} is ready`,
-      line: g.installedVersion ? `You have ${g.installedVersion}.` : "A newer version is available.",
-      art: artFor(game),
-      action: { type: "update", target: game },
-      starts: new Date(now.getTime() - 1000).toISOString(),
-      ends: new Date(now.getTime() + 86_400_000).toISOString(),
-      priority: 0,
-    });
-  }
-  return out;
+export interface ShowcaseSlide {
+  slide: Slide;
+  primary: ResolvedAction;
+  secondary: ResolvedAction | null;
 }
 
 export interface BuildOptions {
   /** The studio free-access switch is on. Free-to-play slides show only while it is. */
   freeAccess?: boolean;
+  /** Ids of events live right now; slides they replace wait. */
+  liveEventIds?: ReadonlySet<string>;
 }
 
 /**
- * Feed slides plus local update slides, filtered and ordered:
- * invalid dropped, expired or not started dropped, not actionable dropped,
- * duplicate ids dropped (first wins), sorted by kind order then priority then id,
- * at most MAX_SLIDES.
+ * Feed slides, filtered and ordered: invalid dropped, outside their window
+ * dropped, replaced by a live event dropped, free slides dropped unless free
+ * access is on, nothing to offer dropped, duplicate ids dropped (first wins),
+ * sorted by priority then id, at most MAX_SLIDES.
  */
 export function buildSlides(
   feed: HomeFeed | null | undefined,
   player: PlayerState,
   now: Date,
-  artFor: (game: string) => string = () => "",
   options: BuildOptions = {},
-): Slide[] {
-  const fromFeed: Slide[] = [];
-  if (feed && feed.version === 1 && Array.isArray(feed.slides)) {
-    for (const raw of feed.slides) {
-      const s = validateSlide(raw);
-      if (s && s.kind !== "update") fromFeed.push(s);
-    }
-  }
-  const locals = localUpdateSlides(player, artFor, now);
-  const withArt = (slide: Slide): Slide => (slide.art === BUNDLED_ART ? { ...slide, art: artFor(slide.game) } : slide);
+): ShowcaseSlide[] {
+  if (!feed || feed.version !== 1 || !Array.isArray(feed.slides)) return [];
   const seen = new Set<string>();
-  return [...fromFeed, ...locals]
-    .map(withArt)
-    .filter((s) => s.kind !== "free" || options.freeAccess === true)
-    .filter((s) => s.art !== "" && isLive(s, now) && isActionable(s, player))
-    .filter((s) => (seen.has(s.id) ? false : (seen.add(s.id), true)))
-    .sort((a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || a.priority - b.priority || a.id.localeCompare(b.id))
+  const out: ShowcaseSlide[] = [];
+  for (const raw of feed.slides) {
+    const slide = validateSlide(raw);
+    // The launcher shows update prompts itself in Jump back in; a feed may not make one.
+    if (!slide || slide.kind === "update") continue;
+    if (slide.kind === "free" && options.freeAccess !== true) continue;
+    if (!isLive({ starts: slide.starts, ends: slide.ends }, now)) continue;
+    if (slide.replacedBy && options.liveEventIds?.has(slide.replacedBy)) continue;
+    if (seen.has(slide.id)) continue;
+    const primary = resolveAction(slide.action, player);
+    if (!primary) continue;
+    seen.add(slide.id);
+    out.push({ slide, primary, secondary: secondaryFor(primary, slide.secondary) });
+  }
+  return out
+    .sort((a, b) => a.slide.priority - b.slide.priority || a.slide.id.localeCompare(b.slide.id))
     .slice(0, MAX_SLIDES);
-}
-
-/** Auto-advance runs only when nothing says to hold still. */
-export function shouldAutoAdvance(o: {
-  reducedMotion: boolean;
-  hovered: boolean;
-  focused: boolean;
-  hidden: boolean;
-  count: number;
-}): boolean {
-  return o.count > 1 && !o.reducedMotion && !o.hovered && !o.focused && !o.hidden;
 }
 
 export function wrapIndex(i: number, count: number): number {
