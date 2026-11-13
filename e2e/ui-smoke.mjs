@@ -80,53 +80,57 @@ try {
     return page;
   }
   const shot = (page, name) => page.screenshot({ path: `${shots}/${name}.png` });
-  const text = async (page) => (await page.locator("body").innerText()).replace(/\s+/g, " ");
+  // Lower-cased: headings are upper-cased by CSS, and innerText follows the CSS.
+const text = async (page) => (await page.locator("body").innerText()).replace(/\s+/g, " ").toLowerCase();
+const has = (body, wanted) => body.includes(wanted.toLowerCase());
 
   let page = await open();
   await page.waitForSelector(".hm-car", { timeout: 15000 });
   let body = await text(page);
   check(await page.locator("nav.tabs .tab").first().innerText() === "Home", "Home is the first tab");
   check(await page.locator("nav.tabs .tab.on").innerText() === "Home", "Home is the default screen");
-  check(body.includes("Corporate Warfare 2.0 is out"), "Home carousel shows the first slide");
-  check(body.includes("Continue playing"), "Home lists Continue playing");
+  check(has(body, "Corporate Warfare 2.0 is out"), "Home carousel shows the first slide");
+  check(has(body, "Continue playing"), "Home lists Continue playing");
+  // The free-access answer arrives after first paint; wait for its slide to join the carousel.
+  await page.waitForFunction(() => document.querySelectorAll(".hm-dot").length === 2, null, { timeout: 15000 });
   await page.locator(".hm-arrow[aria-label='Next slide']").click();
-  check((await text(page)).includes("Everything is free to play while A House Divided is paused"), "free-to-play slide shows while the switch is on");
+  check(has(await text(page), "Everything is free to play while A House Divided is paused"), "free-to-play slide shows while the switch is on");
   await shot(page, "home");
 
   await page.locator("nav.tabs .tab", { hasText: "Library" }).click();
   await page.waitForSelector("table");
   body = await text(page);
-  check(body.includes("A House Divided") && body.includes("Margin of Victory"), "Library lists the games");
+  check(has(body, "A House Divided") && has(body, "Margin of Victory"), "Library lists the games");
   await shot(page, "library");
 
   await page.locator("table tbody tr").first().locator("b").first().click();
   await page.waitForTimeout(300);
   body = await text(page);
-  check(body.includes("Where you can play"), "Game page opens");
-  check(/Reinstall|Open folder/.test(body), "Game page offers folder and reinstall controls");
+  check(has(body, "Where you can play"), "Game page opens");
+  check(/reinstall|open folder/.test(body), "Game page offers folder and reinstall controls");
   await shot(page, "game");
 
   await page.locator("nav.tabs .tab", { hasText: "Store" }).click();
   await page.waitForTimeout(300);
   body = await text(page);
-  check(body.includes("Support the studio") && body.includes("Champion"), "Store shows the three supporter tiers");
-  check(body.includes("$3.00 / month") && body.includes("$9.99 / month") && body.includes("$20.00 / month"), "Store shows the tier prices");
+  check(has(body, "Support the studio") && has(body, "Champion"), "Store shows the three supporter tiers");
+  check(has(body, "$3.00 / month") && has(body, "$9.99 / month") && has(body, "$20.00 / month"), "Store shows the tier prices");
   await shot(page, "store");
 
   await page.locator("nav.tabs .tab", { hasText: "Downloads" }).click();
   await page.waitForTimeout(300);
-  check((await text(page)).includes("Where files go"), "Downloads screen opens");
+  check(has(await text(page), "Where files go"), "Downloads screen opens");
   await shot(page, "downloads");
 
   await page.locator("button.acct").click();
   await page.waitForTimeout(300);
-  check((await text(page)).includes("demo-player"), "Account screen opens");
+  check(has(await text(page), "demo-player"), "Account screen opens");
   await shot(page, "account");
   await page.context().close();
 
   page = await open(() => localStorage.setItem("lakeside.launcher.session", "signed-out"));
   await page.waitForTimeout(500);
-  check((await text(page)).includes("Sign in with Lakeside Games"), "Signed-out first run shows the sign-in screen");
+  check(has(await text(page), "Sign in with Lakeside Games"), "Signed-out first run shows the sign-in screen");
   await shot(page, "signin");
 
   await browser.close();
