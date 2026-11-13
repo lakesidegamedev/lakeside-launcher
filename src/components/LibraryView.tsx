@@ -109,6 +109,12 @@ export function LibraryView({ rows, signedIn, onSelect, onAction, onSignIn }: Pr
                 </td>
                 <td>
                   <span className={`state ${row.state.tone}`}>{row.state.label}</span>
+                  {row.freeText ? (
+                    <>
+                      <br />
+                      <small className="owned">{row.freeText}</small>
+                    </>
+                  ) : null}
                   {row.state.detail ? (
                     <>
                       <br />

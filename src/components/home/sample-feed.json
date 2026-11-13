@@ -7,7 +7,7 @@
       "kind": "release",
       "game": "cw",
       "headline": "Corporate Warfare 2.0 is out",
-      "line": "$14.99, or included with any supporter tier.",
+      "line": "$14.99, or included with Supporter+.",
       "art": "https://lakesidegames.net/store/assets/cw-goods.jpg",
       "action": { "type": "store", "target": "/store/corporate-warfare" },
       "starts": "2026-11-13T00:00:00Z",

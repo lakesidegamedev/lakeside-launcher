@@ -99,6 +99,7 @@ export function GameView({
                 <span className={`state inline ${row.state.tone}`}>{row.state.label}</span>
               </h1>
               <div className="sub">{row.blurb}</div>
+              {row.freeText ? <div className="sub owned">{row.freeText}</div> : null}
             </div>
             <div className="actions">
               <button
