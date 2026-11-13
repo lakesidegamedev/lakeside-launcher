@@ -1,0 +1,192 @@
+name: game install e2e (paid and free)
+
+# Installs Corporate Warfare (paid, Inno setup or AppImage, through the accounts
+# download endpoint) and Grand Century (free, from the signed manifest) with the
+# launcher, starts them, and removes them again. The second test account is an
+# ordinary account that owns nothing; while the studio free-access switch is on
+# it is entitled to every paid game.
+#
+# Windows drives the real launcher window. Linux cannot drive the webview, so it
+# runs the launcher's own install, handoff and start code (example
+# game_install_probe) under a virtual display.
+on:
+  workflow_dispatch:
+    inputs:
+      bundle_run:
+        description: desktop-bundles run id to take the launcher build from (blank = latest successful run on this branch)
+        default: ''
+      games:
+        description: Games to check on Windows (comma separated)
+        default: 'corporate-warfare,grand-century'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install playwright-core only
+        shell: pwsh
+        run: |
+          Set-Location e2e
+          npm init -y | Out-Null
+          npm install playwright-core --no-audit --no-fund
+
+      - name: Install the launcher build under test
+        shell: pwsh
+        env:
+          BUNDLE_RUN: ${{ inputs.bundle_run }}
+        run: |
+          $ProgressPreference = 'SilentlyContinue'
+          $run = $env:BUNDLE_RUN
+          if (-not $run) {
+            $run = gh run list --repo $env:GITHUB_REPOSITORY --workflow 'desktop bundles' --branch $env:GITHUB_REF_NAME --status success --limit 1 --json databaseId --jq '.[0].databaseId'
+          }
+          if (-not $run) { throw 'no successful desktop bundles run to take the launcher from' }
+          "launcher build from desktop bundles run $run"
+          $dir = Join-Path $env:RUNNER_TEMP 'bundle'
+          gh run download $run --repo $env:GITHUB_REPOSITORY -n lakeside-windows-x64 -D $dir
+          $setup = Get-ChildItem -Path $dir -Filter '*setup.exe' | Select-Object -First 1
+          if (-not $setup) { throw 'no setup.exe in the bundle run' }
+          Start-Process -FilePath $setup.FullName -ArgumentList '/S' -Wait
+          Start-Sleep -Seconds 5
+          $entry = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue |
+            Where-Object { $_.DisplayName -eq 'Lakeside' } | Select-Object -First 1
+          $location = $entry.InstallLocation.Trim('"')
+          "launcher installed: " + $entry.DisplayVersion
+          $exe = Get-ChildItem -Path $location -Recurse -Filter '*.exe' |
+            Where-Object { $_.Name -notmatch 'uninstall' } | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $exe) { throw 'launcher executable not found' }
+          "LAUNCHER_EXE=$exe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Start Edge with a debugging port and make it the default opener
+        shell: pwsh
+        run: |
+          $edge = 'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe'
+          if (-not (Test-Path $edge)) { $edge = 'C:\Program Files\Microsoft\Edge\Application\msedge.exe' }
+          $profileDir = Join-Path $env:RUNNER_TEMP 'edge-profile'
+          $progId = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice' -ErrorAction SilentlyContinue).ProgId
+          $cmd = "`"$edge`" --remote-debugging-port=9223 --user-data-dir=`"$profileDir`" --no-first-run --single-argument %1"
+          foreach ($id in @($progId, 'MSEdgeHTM', 'ChromeHTML', 'FirefoxURL') | Where-Object { $_ } | Select-Object -Unique) {
+            $key = "HKCU:\Software\Classes\$id\shell\open\command"
+            New-Item -Path $key -Force | Out-Null
+            Set-ItemProperty -Path $key -Name '(default)' -Value $cmd
+          }
+          "EDGE_EXE=$edge" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "EDGE_PROFILE=$profileDir" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Start Edge and the launcher, then install, play and uninstall
+        shell: pwsh
+        timeout-minutes: 40
+        env:
+          LAKESIDE_TEST2_USERNAME: ${{ secrets.LAKESIDE_TEST2_USERNAME }}
+          LAKESIDE_TEST2_PASSWORD: ${{ secrets.LAKESIDE_TEST2_PASSWORD }}
+          SHOT_DIR: ${{ github.workspace }}\e2e-shots
+          GAMES: ${{ inputs.games || 'corporate-warfare,grand-century' }}
+        run: |
+          Write-Host "::add-mask::$env:LAKESIDE_TEST2_USERNAME"
+          Write-Host "::add-mask::$env:LAKESIDE_TEST2_PASSWORD"
+          Start-Process -FilePath $env:EDGE_EXE -ArgumentList "--remote-debugging-port=9223", "--user-data-dir=$env:EDGE_PROFILE", "--no-first-run", "about:blank"
+          for ($i = 0; $i -lt 30; $i++) {
+            try { Invoke-RestMethod -TimeoutSec 3 http://127.0.0.1:9223/json/version | Out-Null; 'edge CDP up'; break } catch { Start-Sleep -Seconds 1 }
+          }
+          foreach ($root in 'HKLM:', 'HKCU:') {
+            $key = "$root\SOFTWARE\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments"
+            New-Item -Path $key -Force | Out-Null
+            New-ItemProperty -Path $key -Name 'lakeside-launcher.exe' -Value '--remote-debugging-port=9222 --remote-allow-origins=*' -PropertyType String -Force | Out-Null
+          }
+          # The launcher writes its install, checksum and handoff steps here.
+          $env:LAKESIDE_E2E_LOG = Join-Path $env:RUNNER_TEMP 'launcher-e2e.log'
+          Start-Process -FilePath $env:LAUNCHER_EXE -RedirectStandardOutput (Join-Path $env:RUNNER_TEMP 'launcher.out') -RedirectStandardError (Join-Path $env:RUNNER_TEMP 'launcher.err')
+          for ($i = 0; $i -lt 25; $i++) {
+            try { Invoke-RestMethod -TimeoutSec 3 http://127.0.0.1:9222/json/version | Out-Null; 'launcher CDP up'; break } catch { Start-Sleep -Seconds 1 }
+          }
+          node e2e/install.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload screenshots and the launcher log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: game-install-e2e-windows-shots
+          path: |
+            e2e-shots
+            ${{ runner.temp }}/launcher-e2e.log
+          if-no-files-found: warn
+
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xvfb libfuse2t64 xdg-utils || sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xvfb libfuse2 xdg-utils
+          cd e2e && npm init -y >/dev/null && npm install playwright-core --no-audit --no-fund
+
+      - name: Sign in as the second test account (bearer for the install code)
+        env:
+          LAKESIDE_TEST2_USERNAME: ${{ secrets.LAKESIDE_TEST2_USERNAME }}
+          LAKESIDE_TEST2_PASSWORD: ${{ secrets.LAKESIDE_TEST2_PASSWORD }}
+          SHOT_DIR: ${{ github.workspace }}/e2e-shots
+        run: |
+          echo "::add-mask::$LAKESIDE_TEST2_USERNAME"
+          echo "::add-mask::$LAKESIDE_TEST2_PASSWORD"
+          node e2e/token.mjs "$RUNNER_TEMP/bearer"
+
+      - name: Corporate Warfare (AppImage, paid path with handoff)
+        timeout-minutes: 15
+        env:
+          PRODUCT: corporate-warfare
+          LAKESIDE_INSTALL_ROOT: ${{ runner.temp }}/lakeside-root
+          LAKESIDE_E2E_LOG: ${{ runner.temp }}/linux-e2e.log
+        run: |
+          export LAKESIDE_BEARER="$(cat "$RUNNER_TEMP/bearer")"
+          xvfb-run -a cargo run --manifest-path src-tauri/Cargo.toml --example game_install_probe
+
+      - name: Grand Century (AppImage, free path)
+        timeout-minutes: 15
+        env:
+          PRODUCT: grand-century-desktop
+          LAKESIDE_INSTALL_ROOT: ${{ runner.temp }}/lakeside-root
+          LAKESIDE_E2E_LOG: ${{ runner.temp }}/linux-e2e.log
+        run: |
+          xvfb-run -a cargo run --manifest-path src-tauri/Cargo.toml --example game_install_probe
+
+      - name: Show the launcher log
+        if: always()
+        run: cat "$RUNNER_TEMP/linux-e2e.log" 2>/dev/null || echo "(no log)"
+
+      - name: Upload the log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: game-install-e2e-linux
+          path: |
+            ${{ runner.temp }}/linux-e2e.log
+            e2e-shots
+          if-no-files-found: warn

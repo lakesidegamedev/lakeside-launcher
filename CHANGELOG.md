@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.7.1
+
+- Grand Century installs and starts. The launcher looked for the wrong program
+  name; the real one is `grandcentury-desktop.exe` in your Local AppData folder.
+  Games are now found through their own uninstall entry first (current user and
+  all users), with the known folder as the fallback, so a copy you installed
+  yourself still shows Play. Grand Century always offers Play in browser too.
+- Uninstall waits for the game's uninstaller to really finish before the game
+  disappears from the list. Saves are never touched.
+- Paid downloads ignore platforms this launcher does not know. A Linux .deb and
+  a Mac disk image show as Download: the file is checked, saved to Downloads and
+  its folder opens.
+- New automatic check, "game install e2e (paid and free)": installs Corporate
+  Warfare and Grand Century from the launcher on Windows and Linux, plays them,
+  and uninstalls them. Test builds can write a small log of install and sign-in
+  handoff steps when told to; it never contains a code or a password.
+
 ## 0.7.0
 
 - New Home. A full-bleed showcase of what is new, with one large action and a
