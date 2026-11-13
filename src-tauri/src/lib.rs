@@ -591,8 +591,13 @@ fn open_external(url: String) -> Result<(), String> {
 
     #[cfg(target_os = "windows")]
     {
-        return std::process::Command::new("cmd")
-            .args(["/C", "start", "", parsed.as_str()])
+        // Not `cmd /C start`: cmd treats `&` in the query string as a command
+        // separator and the browser gets a truncated URL. The URL handler hands
+        // the whole URL to the default browser unchanged.
+        use std::os::windows::process::CommandExt;
+        return std::process::Command::new("rundll32")
+            .args(["url.dll,FileProtocolHandler", parsed.as_str()])
+            .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
