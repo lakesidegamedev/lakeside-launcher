@@ -1,0 +1,19 @@
+/* Home carousel. Uses the launcher's theme variables with the store's values as fallbacks. */
+.hm-car{position:relative;height:40vh;min-height:250px;border:1px solid var(--line,#2c4170);border-radius:5px;overflow:hidden;background:var(--plate,#1F3159);color:var(--text,#F4F6FB);font-family:"Fira Sans",system-ui,sans-serif}
+.hm-slide{position:absolute;inset:0;display:grid;grid-template-columns:minmax(300px,36%) 1fr}
+.hm-slide[hidden]{display:none}
+.hm-txt{padding:22px 24px 60px;display:flex;flex-direction:column;gap:10px;border-right:1px solid var(--line,#2c4170)}
+.hm-kind{align-self:flex-start;font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-2,#C3CEE3);border:1px solid var(--line,#2c4170);border-radius:3px;padding:1px 7px}
+.hm-hl{font-size:26px;line-height:1.15;font-weight:700;letter-spacing:-.3px;margin:0;text-transform:none;color:var(--text,#F4F6FB)}
+.hm-txt p{margin:0;font-size:14px;color:var(--text-2,#C3CEE3);max-width:36ch}
+.hm-btn{align-self:flex-start;margin-top:8px;padding:8px 16px;font:600 14px "Fira Sans",system-ui,sans-serif;border-radius:4px;border:1px solid var(--brass,#F2842F);background:var(--brass,#F2842F);color:#1a1206;cursor:pointer}
+.hm-art{width:100%;height:100%;object-fit:cover;display:block}
+.hm-ctl{position:absolute;left:0;bottom:0;width:36%;min-width:300px;display:flex;align-items:center;gap:8px;padding:0 24px 16px}
+.hm-arrow{width:30px;height:28px;border:1px solid var(--line,#2c4170);border-radius:4px;background:var(--ground-2,#19274A);color:inherit;font:600 15px "Fira Sans",system-ui,sans-serif;cursor:pointer}
+.hm-dots{display:flex;gap:6px;margin-left:6px}
+.hm-dot{width:10px;height:10px;border-radius:50%;border:1px solid var(--text-3,#9AA8C6);background:none;padding:0;cursor:pointer}
+.hm-dot.hm-on{background:var(--text,#F4F6FB);border-color:var(--text,#F4F6FB)}
+.hm-count{margin-left:auto;font-size:12px;color:var(--text-3,#9AA8C6)}
+.hm-car :focus-visible{outline:2px solid var(--brass,#F2842F);outline-offset:2px}
+/* No slide animation exists, so reduced motion needs no override: slides swap instantly. */
+@media (max-width:1100px){.hm-hl{font-size:22px}.hm-txt{padding:16px 18px 60px}}

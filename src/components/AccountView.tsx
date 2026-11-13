@@ -1,161 +1,175 @@
-import { CATALOG, formatPrice, type Entitlements } from "../catalog";
+import { CATALOG } from "../catalog";
+import type { Entitlements } from "../catalog";
 import type { Session } from "../platform/client";
-import type { ReleaseProduct } from "../lib/tauri";
 import type { SignInProvider } from "../lib/signin";
+import { tierDescription, tierPrice, type LiveCatalog } from "../lib/liveCatalog";
 
 interface Props {
   session: Session | null;
   entitlements: Entitlements;
-  mode: "demo" | "live";
-  releases: Record<string, ReleaseProduct>;
+  catalog: LiveCatalog | null;
+  accountUrl: string;
   onSignIn: (provider: SignInProvider) => void;
   onSignOut: () => void;
+  onOpenUrl: (url: string) => void;
   onRefresh: () => void;
 }
+
+const PROVIDER_NAMES: Record<string, string> = {
+  ahd: "Lakeside Games",
+  discord: "Discord",
+  demo: "a local demo account",
+};
 
 export function AccountView({
   session,
   entitlements,
-  mode,
-  releases,
+  catalog,
+  accountUrl,
   onSignIn,
   onSignOut,
+  onOpenUrl,
   onRefresh,
 }: Props): JSX.Element {
-  const purchases = CATALOG.filter(
-    (product) => product.productId !== null && entitlements[product.productId] !== undefined,
-  );
+  if (!session) {
+    return (
+      <section>
+        <div className="head">
+          <h1>Account</h1>
+        </div>
+        <div className="panel" style={{ maxWidth: 420 }}>
+          <h3>You are not signed in</h3>
+          <div className="sub" style={{ marginBottom: 10 }}>
+            Sign in to load your purchases and supporter benefits.
+          </div>
+          <button type="button" className="btn p" onClick={() => onSignIn("ahd")}>
+            Sign in with Lakeside Games
+          </button>{" "}
+          <button type="button" className="btn" onClick={() => onSignIn("discord")}>
+            Discord
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  // Everything the platform says is owned, named from the live catalog.
+  const owned = Object.entries(entitlements)
+    .filter(([, state]) => state === "owned")
+    .map(([id]) => {
+      const game = CATALOG.find((product) => product.entitlementIds.includes(id));
+      const live = catalog?.products.find((product) => product.id === id) ?? null;
+      return { id, name: live?.name ?? game?.title ?? id, game: game?.title ?? null };
+    });
+  const providerName = PROVIDER_NAMES[session.provider] ?? session.provider;
+  const tiers = catalog?.subscriptions ?? [];
 
   return (
-    <section className="view account">
-      <div className="account-grid">
-        <article className="panel account-panel">
-          <h2 className="section-title">Session</h2>
-          {session ? (
-            <>
-              <div className="identity">
-                <span className="avatar large" aria-hidden="true">
-                  {session.username.slice(0, 1).toUpperCase()}
-                </span>
-                <div>
-                  <strong>{session.username}</strong>
-                  <p>{session.email ?? "No email on this provider"}</p>
-                  <span className="badge">{session.provider.toUpperCase()}</span>
+    <section>
+      <div className="head">
+        <h1>Account</h1>
+        <div className="sp">
+          <button type="button" className="btn sm" onClick={onRefresh}>
+            Refresh purchases
+          </button>
+          <button type="button" className="btn sm" onClick={onSignOut}>
+            Sign out
+          </button>
+        </div>
+      </div>
+      <div className="two wide">
+        <div>
+          <div className="panel idrow">
+            <span className="av big" aria-hidden="true">
+              {session.username.slice(0, 1).toUpperCase()}
+            </span>
+            <div>
+              <div className="name">{session.username}</div>
+              <div className="muted">
+                Signed in with {providerName}
+                {session.email ? `. ${session.email}` : ""}
+              </div>
+            </div>
+          </div>
+
+          <h2>Sign-in methods</h2>
+          <table>
+            <tbody>
+              <tr>
+                <td>
+                  <b>{providerName}</b>
+                </td>
+                <td>
+                  <span className="owned">Connected</span>
+                </td>
+                <td className="r muted">This session</td>
+              </tr>
+              <tr>
+                <td colSpan={2} className="wrap muted">
+                  Connect or disconnect other sign-in methods on your account page.
+                </td>
+                <td className="r">
+                  <button type="button" className="btn sm" onClick={() => onOpenUrl(accountUrl)}>
+                    Manage
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h2>Purchases</h2>
+          {owned.length > 0 ? (
+            <table>
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Game</th>
+                  <th className="r">Receipt</th>
+                </tr>
+              </thead>
+              <tbody>
+                {owned.map((item) => (
+                  <tr key={item.id}>
+                    <td>{item.name}</td>
+                    <td className="muted">{item.game ?? ""}</td>
+                    <td className="r">
+                      <button type="button" className="btn sm" onClick={() => onOpenUrl(accountUrl)}>
+                        View
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="empty">No purchases on this account yet.</div>
+          )}
+        </div>
+        <aside>
+          {tiers.length > 0 && catalog ? (
+            tiers.map((tier) => (
+              <div className="panel" key={tier.id} style={{ marginBottom: 12 }}>
+                <h3>{tier.name}</h3>
+                <div className="sub" style={{ marginBottom: 8 }}>
+                  {tierPrice(tier)}
                 </div>
+                <p className="sub">{tierDescription(tier, catalog)}</p>
               </div>
-              <div className="panel-actions">
-                <button type="button" className="btn ghost" onClick={onRefresh}>
-                  Refresh purchases
-                </button>
-                <button type="button" className="btn danger" onClick={onSignOut}>
-                  Sign out
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              <p className="panel-copy">
-                Sign in with your Lakeside account to load the games and packs attached to it.
-                The launcher never handles card details; checkout opens in your browser.
-              </p>
-              <div className="actions">
-                <button type="button" className="btn primary" onClick={() => onSignIn("discord")}>
-                  Sign in with Discord
-                </button>
-                <button type="button" className="btn" onClick={() => onSignIn("ahd")}>
-                  Sign in with A House Divided
-                </button>
-              </div>
-            </>
-          )}
-        </article>
-
-        <article className="panel account-panel">
-          <h2 className="section-title">Purchases</h2>
-          {purchases.length === 0 ? (
-            <p className="panel-copy">No purchases on this account yet.</p>
-          ) : (
-            <ul className="purchase-list">
-              {purchases.map((product) => {
-                const productId = product.productId;
-                if (!productId) return null;
-                const state = entitlements[productId];
-                return (
-                  <li key={product.id}>
-                    <span className="purchase-mark" style={{ background: product.accent }}>
-                      {product.mark}
-                    </span>
-                    <span className="purchase-copy">
-                      <strong>{product.title}</strong>
-                      <small>
-                        {product.priceCents === null
-                          ? "Free"
-                          : formatPrice(product.priceCents, product.currency)}{" "}
-                        · {productId}
-                      </small>
-                    </span>
-                    <span className={state === "owned" ? "badge owned" : "badge"}>
-                      {state === "owned" ? "Owned" : state}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </article>
-
-        <article className="panel account-panel">
-          <h2 className="section-title">Devices</h2>
-          <p className="panel-copy">
-            Device management is not built yet. The launcher holds one local session per
-            machine, stored outside the webview.
-          </p>
-          <ul className="device-list">
-            <li>
-              <span>
-                <strong>This device</strong>
-                <small>Windows, macOS or Linux</small>
-              </span>
-              <span className="badge owned">Active</span>
-            </li>
-          </ul>
-        </article>
-
-        <article className="panel account-panel">
-          <h2 className="section-title">Release channel</h2>
-          {Object.keys(releases).length === 0 ? (
-            <p className="panel-copy">
-              Release metadata is unavailable right now. Installed games still launch and the
-              launcher still updates itself.
-            </p>
-          ) : (
-            <ul className="purchase-list">
-              {Object.entries(releases).map(([id, release]) => (
-                <li key={id}>
-                  <span className="purchase-mark" style={{ background: "#2f7f7a" }}>
-                    {release.name.slice(0, 2).toUpperCase()}
-                  </span>
-                  <span className="purchase-copy">
-                    <strong>{release.name}</strong>
-                    <small>
-                      {release.version} · {Object.keys(release.artifacts).length} builds · signed
-                    </small>
-                  </span>
-                  <span className="badge owned">Verified</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </article>
-
-        <article className="panel account-panel">
-          <h2 className="section-title">Platform mode</h2>
-          <p className="panel-copy">
-            {mode === "demo"
-              ? "Demo mode: sessions and entitlements are simulated locally. Desktop builds default to live; set VITE_PLATFORM_MODE=demo only for a demo build."
-              : "Live mode: identity comes from lakeside-auth and purchases from lakeside-accounts. If the platform is unreachable the launcher boots from its last known library."}
-          </p>
-        </article>
+            ))
+          ) : null}
+          <div className="btnrow" style={{ marginBottom: 12 }}>
+            <button
+              type="button"
+              className="btn sm"
+              onClick={() => onOpenUrl("https://lakesidegames.net/account/subscription/manage")}
+            >
+              Manage subscription
+            </button>
+          </div>
+          <div className="note">
+            Cancel any time. Installed games keep working offline. Refunds within 14 days.
+          </div>
+        </aside>
       </div>
     </section>
   );

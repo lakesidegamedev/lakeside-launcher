@@ -1,107 +1,148 @@
 import { useState } from "react";
-import type { Entitlements, Product } from "../catalog";
-import { GameCard, type ChipTone } from "./GameCard";
+import type { GameRow } from "../lib/rows";
+import { Thumb } from "./Thumb";
+
+type Filter = "all" | "installed" | "updates" | "browser";
 
 interface Props {
-  products: readonly Product[];
-  entitlements: Entitlements;
-  busy: string | null;
+  rows: readonly GameRow[];
   signedIn: boolean;
-  primaryLabel: (product: Product) => string;
-  chipFor: (product: Product) => { label: string; tone: ChipTone };
-  selectedId: string | null;
-  onSelect: (product: Product) => void;
-  onPrimary: (product: Product) => void;
-  onWeb: (product: Product) => void;
+  onSelect: (row: GameRow) => void;
+  onAction: (row: GameRow) => void;
   onSignIn: () => void;
-  onBrowseStore: () => void;
 }
 
-export function LibraryView({
-  products,
-  entitlements,
-  busy,
-  signedIn,
-  primaryLabel,
-  chipFor,
-  selectedId,
-  onSelect,
-  onPrimary,
-  onWeb,
-  onSignIn,
-  onBrowseStore,
-}: Props): JSX.Element {
-  const [query, setQuery] = useState("");
+export function matchesFilter(row: GameRow, filter: Filter): boolean {
+  switch (filter) {
+    case "installed":
+      return row.installedVersion !== null;
+    case "updates":
+      return row.updateAvailable;
+    case "browser":
+      return row.hasWeb;
+    default:
+      return true;
+  }
+}
+
+export function matchesQuery(row: GameRow, query: string): boolean {
   const needle = query.trim().toLowerCase();
-  const visible = needle
-    ? products.filter(
-        (product) =>
-          product.title.toLowerCase().includes(needle) ||
-          product.tagline.toLowerCase().includes(needle) ||
-          product.game.toLowerCase().includes(needle),
-      )
-    : products;
+  if (!needle) return true;
+  return row.title.toLowerCase().includes(needle) || row.blurb.toLowerCase().includes(needle);
+}
+
+export function LibraryView({ rows, signedIn, onSelect, onAction, onSignIn }: Props): JSX.Element {
+  const [filter, setFilter] = useState<Filter>("all");
+  const [query, setQuery] = useState("");
+  const counts: Record<Filter, number> = {
+    all: rows.length,
+    installed: rows.filter((row) => matchesFilter(row, "installed")).length,
+    updates: rows.filter((row) => matchesFilter(row, "updates")).length,
+    browser: rows.filter((row) => matchesFilter(row, "browser")).length,
+  };
+  const visible = rows.filter((row) => matchesFilter(row, filter) && matchesQuery(row, query));
+  const chips: ReadonlyArray<{ id: Filter; label: string }> = [
+    { id: "all", label: "All" },
+    { id: "installed", label: "Installed" },
+    { id: "updates", label: "Updates" },
+    { id: "browser", label: "Browser" },
+  ];
 
   return (
-    <section className="view">
-      <div className="view-tools">
-        <label className="search">
-          <span className="sr-only">Search library</span>
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search your library"
-            type="search"
-          />
-        </label>
-        {!signedIn ? (
-          <button type="button" className="btn ghost" onClick={onSignIn}>
-            Sign in to load purchases
-          </button>
-        ) : null}
+    <section>
+      <div className="head">
+        <h1>Library</h1>
+        <span className="muted">
+          {rows.length} games, {counts.installed} installed
+        </span>
+        <div className="sp">
+          {chips.map((chip) => (
+            <button
+              key={chip.id}
+              type="button"
+              className={filter === chip.id ? "chip on" : "chip"}
+              onClick={() => setFilter(chip.id)}
+            >
+              {chip.label} {counts[chip.id]}
+            </button>
+          ))}
+          <label className="search">
+            <span className="sr-only">Search your games</span>
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search your games"
+            />
+          </label>
+        </div>
       </div>
 
       {visible.length === 0 ? (
         <div className="empty">
-          <h2>{needle ? "No games match that search" : "Your library is empty"}</h2>
-          <p>
-            {needle
-              ? "Try a shorter search, or clear it to see everything."
-              : signedIn
-                ? "Buy a game or a campaign pack and it will appear here."
-                : "Sign in to load the games already attached to your account."}
-          </p>
-          <div className="empty-actions">
-            {!signedIn ? (
-              <button type="button" className="btn primary" onClick={onSignIn}>
-                Sign in
-              </button>
-            ) : null}
-            <button type="button" className="btn ghost" onClick={onBrowseStore}>
-              Browse the store
-            </button>
-          </div>
+          {rows.length === 0 ? "Nothing in your library yet. Open the Store to find a game." : "No games match."}
         </div>
       ) : (
-        <div className="grid">
-          {visible.map((product) => (
-            <GameCard
-              key={product.id}
-              product={product}
-              entitlements={entitlements}
-              mode="library"
-              chip={chipFor(product)}
-              selected={selectedId === product.id}
-              busy={busy === product.id}
-              actionLabel={primaryLabel(product)}
-              onSelect={() => onSelect(product)}
-              onAction={() =>
-                product.delivery === "web" ? onWeb(product) : onPrimary(product)
-              }
-            />
-          ))}
-        </div>
+        <table className="lib">
+          <thead>
+            <tr>
+              <th style={{ width: "36%" }}>Game</th>
+              <th>State</th>
+              <th>Size</th>
+              <th>Last played</th>
+              <th className="r">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visible.map((row) => (
+              <tr key={row.product.id}>
+                <td>
+                  <button type="button" className="rowlink" onClick={() => onSelect(row)}>
+                    <Thumb product={row.product} />
+                    <span>
+                      <b>
+                        <span className="dot" style={{ background: row.product.accent }} /> {row.title}
+                      </b>
+                      <small>{row.blurb}</small>
+                    </span>
+                  </button>
+                </td>
+                <td>
+                  <span className={`state ${row.state.tone}`}>{row.state.label}</span>
+                  {row.state.detail ? (
+                    <>
+                      <br />
+                      <small className="muted">{row.state.detail}</small>
+                    </>
+                  ) : null}
+                </td>
+                <td>{row.sizeText}</td>
+                <td>{row.lastPlayed}</td>
+                <td className="r">
+                  <button
+                    type="button"
+                    className="btn p"
+                    disabled={row.actionDisabled}
+                    onClick={() => onAction(row)}
+                  >
+                    {row.action.label}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       )}
+
+      {!signedIn ? (
+        <div className="note" style={{ marginTop: 12 }}>
+          You are not signed in, so only free games show here.{" "}
+          <button type="button" className="textlink" onClick={onSignIn}>
+            Sign in to load your purchases
+          </button>
+          .
+        </div>
+      ) : null}
     </section>
   );
 }

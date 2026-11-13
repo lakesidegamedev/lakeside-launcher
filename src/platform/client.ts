@@ -38,7 +38,7 @@ export interface PlatformClient {
 const SESSION_KEY = "lakeside.launcher.session";
 const ENTITLEMENTS_KEY = "lakeside.launcher.entitlements";
 
-// Phase 0 demo library: a player who owns the AHD client and one campaign pack.
+// Demo library: a player who owns A House Divided, Corporate Warfare and one country pack.
 const DEMO_SESSION: Session = {
   username: "demo-player",
   email: "demo@lakesidegames.net",
@@ -47,8 +47,9 @@ const DEMO_SESSION: Session = {
 };
 
 const DEMO_ENTITLEMENTS: Entitlements = {
-  "ahd-client": "owned",
-  "us-historical": "owned",
+  "ahd-singleplayer": "owned",
+  "corporate-warfare": "owned",
+  "uk-elections": "owned",
 };
 
 function readStorage<T>(key: string): T | null {

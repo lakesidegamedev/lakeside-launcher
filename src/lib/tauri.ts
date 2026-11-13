@@ -188,3 +188,95 @@ export async function platformEntitlements(): Promise<Record<string, string>> {
 export async function platformSignOut(): Promise<void> {
   await invoke<void>("platform_sign_out");
 }
+
+/** The live store catalog as raw JSON. Browser previews ask the site directly. */
+export async function fetchLiveCatalog(): Promise<unknown> {
+  if (isDesktop()) return invoke<unknown>("fetch_live_catalog");
+  const response = await fetch("https://lakesidegames.net/account/api/catalog");
+  if (!response.ok) throw new Error(`The store catalog returned ${response.status}`);
+  return response.json();
+}
+
+export interface PatchNote {
+  version: string;
+  publishedAt: string | null;
+  body: string;
+}
+
+/** The latest published release notes behind a manifest notes link. Empty when none. */
+export async function getPatchNotes(notesUrl: string, limit = 3): Promise<PatchNote[]> {
+  return invoke<PatchNote[]>("patch_notes", { notesUrl, limit });
+}
+
+/**
+ * Backend commands the redesigned screens use that may not exist in this build
+ * of the desktop shell. The Rust side reports its own list through
+ * `launcher_capabilities`; a shell without that command supports none of them.
+ */
+export type Capability =
+  | "open_install_folder"
+  | "uninstall_product"
+  | "install_details"
+  | "set_install_root"
+  | "verify_installed"
+  | "pause_download";
+
+export async function getCapabilities(): Promise<ReadonlySet<Capability>> {
+  try {
+    const list = await invoke<string[]>("launcher_capabilities");
+    return new Set(list as Capability[]);
+  } catch {
+    return new Set();
+  }
+}
+
+/** Open a game's install folder, or the install root when no product is given. */
+export async function openInstallFolder(productId: string | null): Promise<void> {
+  await invoke<void>("open_install_folder", { productId });
+}
+
+export async function getInstallRoot(): Promise<string> {
+  return invoke<string>("get_install_root");
+}
+
+/** Use a new install folder for new installs, or the default when null. Resolves to the folder in use. */
+export async function setInstallRoot(path: string | null): Promise<string> {
+  return invoke<string>("set_install_root", { path });
+}
+
+export async function uninstallProduct(productId: string): Promise<void> {
+  await invoke<void>("uninstall_product", { productId });
+}
+
+export interface InstallDetails {
+  location: string;
+  sizeBytes: number | null;
+  lastPlayedAt: number | null;
+  freeSpaceBytes: number | null;
+}
+
+export async function installDetails(productId: string): Promise<InstallDetails> {
+  return invoke<InstallDetails>("install_details", { productId });
+}
+
+/**
+ * The home feed. The desktop shell fetches and validates it (https, studio
+ * hosts, schema). A browser preview asks the site directly; if the site blocks
+ * that, the caller falls back to the bundled slides. Slides are validated again
+ * in the webview either way.
+ */
+export async function fetchHomeFeed(): Promise<import("../components/home/slides").HomeFeed | null> {
+  if (isDesktop()) return invoke<import("../components/home/slides").HomeFeed>("fetch_home_feed");
+  const response = await fetch("https://lakesidegames.net/download/launcher/home.json");
+  if (!response.ok) return null;
+  return (await response.json()) as import("../components/home/slides").HomeFeed;
+}
+
+/** Whether the studio free-access switch is on (the public switch the entitlements read). */
+export async function fetchFreeAccess(): Promise<boolean> {
+  if (isDesktop()) return invoke<boolean>("free_access_status");
+  const response = await fetch("https://lakesidegames.net/account/api/free-access");
+  if (!response.ok) return false;
+  const body = (await response.json()) as { on?: unknown };
+  return body.on === true;
+}

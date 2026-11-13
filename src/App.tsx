@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CATALOG,
+  PRODUCTS_BY_ID,
   canLaunchDesktop,
   executableFor,
   installerSupported,
   libraryProducts,
-  storeProducts,
   type Entitlements,
   type Platform,
   type Product,
@@ -14,39 +14,62 @@ import { createPlatformClient, type Session } from "./platform/client";
 import { buildSignInUrl, type SignInProvider } from "./lib/signin";
 import {
   beginSignIn,
-  isDesktop,
-  launchProduct,
-  launchDesktopApp,
-  detectDesktopApp,
-  onSignInCode,
-  openExternal,
-  openWebGame,
-  getReleaseManifest,
   getAccountRelease,
+  getCapabilities,
+  getPatchNotes,
+  getReleaseManifest,
+  installDetails,
   installRelease,
   installedProducts,
+  isDesktop,
+  launchDesktopApp,
+  launchProduct,
+  detectDesktopApp,
   onInstallProgress,
-  type InstallProgress,
+  onSignInCode,
+  openExternal,
+  openInstallFolder,
+  openWebGame,
+  getInstallRoot as getInstallRootSetting,
+  setInstallRoot as setInstallRootSetting,
+  uninstallProduct,
+  type Capability,
+  type InstallDetails,
   type InstalledProduct,
+  type PatchNote,
   type ReleaseArtifact,
   type ReleaseProduct,
 } from "./lib/tauri";
-import type { ChipTone } from "./components/GameCard";
-import { Sidebar } from "./components/Sidebar";
-import { LibraryView } from "./components/LibraryView";
-import { StoreView } from "./components/StoreView";
-import { AccountView } from "./components/AccountView";
-import { ProductDetail } from "./components/ProductDetail";
 import { checkForUpdate, installUpdate, type UpdateInfo } from "./lib/updater";
 import { isNewerVersion } from "./lib/version";
+import { gameAction, gameState } from "./lib/state";
+import { loadCatalog, findLive, type CatalogResult } from "./lib/liveCatalog";
+import { formatBytes } from "./lib/format";
+import { formatPrice } from "./catalog";
+import {
+  activeDownloads,
+  applyProgress,
+  newDownload,
+  nextToStart,
+  type DownloadItem,
+} from "./lib/downloads";
+import { DEMO_DOWNLOADS, DEMO_INSTALLED, DEMO_NOTES, DEMO_RELEASES } from "./lib/demo";
+import type { GameRow } from "./lib/rows";
+import { TopBar, type View } from "./components/TopBar";
+import { LibraryView } from "./components/LibraryView";
+import { GameView } from "./components/GameView";
+import { StoreView } from "./components/StoreView";
+import { DownloadsView } from "./components/DownloadsView";
+import { AccountView } from "./components/AccountView";
+import { SignInView } from "./components/SignInView";
+import { StatusBar } from "./components/StatusBar";
+import { HomeView } from "./components/HomeView";
+import type { HomeFeed, SlideAction } from "./components/home/slides";
+import { loadFreeAccess, loadHomeFeed } from "./lib/homeFeed";
+import { SLIDE_GAME_TO_ROW, continuePlaying, playerState, recentlyUpdated } from "./lib/home";
 
-export type View = "library" | "store" | "account";
-
-const VIEW_COPY: Record<View, { title: string; subtitle: string }> = {
-  library: { title: "Library", subtitle: "Your games, ready when you are" },
-  store: { title: "Store", subtitle: "Games and campaign packs for your account" },
-  account: { title: "Settings", subtitle: "Session, purchases and devices" },
-};
+const GUEST_KEY = "lakeside.launcher.guest";
+const ACCOUNT_URL = "https://lakesidegames.net/account";
 
 function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -63,24 +86,45 @@ function detectPlatform(): Platform {
 
 export function App(): JSX.Element {
   const [client] = useState(createPlatformClient);
+  const demo = client.mode === "demo" && !isDesktop();
+  const platform = useMemo(detectPlatform, []);
+
   const [session, setSession] = useState<Session | null>(null);
   const [entitlements, setEntitlements] = useState<Entitlements>({});
-  const [view, setView] = useState<View>("library");
-  const [selected, setSelected] = useState<Product | null>(null);
+  const [view, setView] = useState<View>("home");
+  const [gameId, setGameId] = useState<string | null>(null);
+  const [guest, setGuest] = useState(() => {
+    try {
+      return localStorage.getItem(GUEST_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [updateProgress, setUpdateProgress] = useState<number | null>(null);
   const [updating, setUpdating] = useState(false);
-  const [releases, setReleases] = useState<Record<string, ReleaseProduct>>({});
-  const [installed, setInstalled] = useState<Record<string, InstalledProduct>>({});
-  const [installing, setInstalling] = useState<string | null>(null);
-  const [installFraction, setInstallFraction] = useState<number | null>(null);
+  const [releases, setReleases] = useState<Record<string, ReleaseProduct>>(
+    demo ? DEMO_RELEASES : {},
+  );
+  const [installed, setInstalled] = useState<Record<string, InstalledProduct>>(
+    demo ? DEMO_INSTALLED : {},
+  );
   // Paid products whose release lookup finished, so "Coming tonight" only
   // shows once the accounts service actually said nothing is published.
   const [releaseChecked, setReleaseChecked] = useState<Record<string, boolean>>({});
+  const [downloads, setDownloads] = useState<DownloadItem[]>(demo ? DEMO_DOWNLOADS : []);
+  const [catalogResult, setCatalogResult] = useState<CatalogResult | null>(null);
+  const [capabilities, setCapabilities] = useState<ReadonlySet<Capability>>(new Set());
+  const [notes, setNotes] = useState<Record<string, PatchNote[]>>(demo ? DEMO_NOTES : {});
+  const [details, setDetails] = useState<Record<string, InstallDetails>>({});
+  const [installRoot, setInstallRoot] = useState<string | null>(null);
+  const [homeFeed, setHomeFeed] = useState<HomeFeed | null>(null);
+  const [freeAccess, setFreeAccess] = useState(false);
 
+  // Session and purchases.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -98,6 +142,31 @@ export function App(): JSX.Element {
     };
   }, [client]);
 
+  // The live store catalog.
+  useEffect(() => {
+    let cancelled = false;
+    void loadCatalog().then((result) => {
+      if (!cancelled) setCatalogResult(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Home slides and the free-access switch.
+  useEffect(() => {
+    let cancelled = false;
+    void loadHomeFeed().then((result) => {
+      if (!cancelled) setHomeFeed(result.feed);
+    });
+    void loadFreeAccess().then((on) => {
+      if (!cancelled) setFreeAccess(on);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useEffect(() => {
     if (!notice) return;
     const timer = setTimeout(() => setNotice(null), 7000);
@@ -114,6 +183,9 @@ export function App(): JSX.Element {
       .catch(() => {
         // Offline or the feed is unreachable: stay quiet on startup.
       });
+    void getCapabilities().then((next) => {
+      if (!cancelled) setCapabilities(next);
+    });
     return () => {
       cancelled = true;
     };
@@ -167,7 +239,7 @@ export function App(): JSX.Element {
   useEffect(() => {
     if (!isDesktop()) return;
     let cancelled = false;
-    const paid = CATALOG.filter((product) => product.authenticatedDownload && product.productId);
+    const paid = CATALOG.filter((product) => product.authenticatedDownload && product.entitlementIds[0]);
     if (!signedInUser) {
       setReleaseChecked({});
       setReleases((previous) => {
@@ -178,7 +250,7 @@ export function App(): JSX.Element {
       return;
     }
     for (const product of paid) {
-      void getAccountRelease(product.productId as string)
+      void getAccountRelease(product.entitlementIds[0] as string)
         .catch(() => null)
         .then((release) => {
           if (cancelled) return;
@@ -197,7 +269,7 @@ export function App(): JSX.Element {
   }, [signedInUser]);
 
   useEffect(() => {
-    if (!isDesktop() || detectPlatform() !== "windows") return;
+    if (!isDesktop() || platform !== "windows") return;
     let cancelled = false;
     for (const product of CATALOG.filter((entry) => entry.registryApp)) {
       void detectDesktopApp(product.id).then((app) => {
@@ -215,15 +287,21 @@ export function App(): JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [platform]);
 
+  // Real progress from the install events, folded into the queue.
   useEffect(() => {
     if (!isDesktop()) return;
     let unlisten: (() => void) | null = null;
-    void onInstallProgress((progress: InstallProgress) => {
-      if (progress.total && progress.total > 0) {
-        setInstallFraction(Math.min(progress.downloaded / progress.total, 1));
-      }
+    void onInstallProgress((progress) => {
+      const now = Date.now();
+      setDownloads((previous) =>
+        previous.map((item) =>
+          item.id === progress.productId && item.status === "running"
+            ? applyProgress(item, progress.downloaded, progress.total, now)
+            : item,
+        ),
+      );
     }).then((stop) => {
       unlisten = stop;
     });
@@ -232,10 +310,87 @@ export function App(): JSX.Element {
     };
   }, []);
 
-  const library = libraryProducts(entitlements).filter(
-    (product) => !product.registryApp || installed[product.id] !== undefined || canInstall(product),
-  );
-  const store = storeProducts(entitlements);
+  useEffect(() => {
+    if (!capabilities.has("set_install_root")) return;
+    let cancelled = false;
+    void getInstallRootSetting()
+      .then((root) => {
+        if (!cancelled) setInstallRoot(root);
+      })
+      .catch(() => {
+        // The folder just is not shown.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [capabilities]);
+
+  // Details about each installed game, when this build of the shell can report them.
+  useEffect(() => {
+    if (!capabilities.has("install_details")) return;
+    let cancelled = false;
+    for (const id of Object.keys(installed)) {
+      void installDetails(id)
+        .then((next) => {
+          if (!cancelled) setDetails((previous) => ({ ...previous, [id]: next }));
+        })
+        .catch(() => {
+          // Leave the details blank rather than guess.
+        });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [capabilities, installed]);
+
+  // Patch notes for the open game page: the latest three, from its release notes.
+  const selectedDesktopId = gameId
+    ? (PRODUCTS_BY_ID.get(gameId)?.companion ?? gameId)
+    : null;
+  const notesUrl = selectedDesktopId ? (releases[selectedDesktopId]?.notesUrl ?? null) : null;
+  useEffect(() => {
+    if (!selectedDesktopId || !notesUrl || !isDesktop() || notes[selectedDesktopId]) return;
+    let cancelled = false;
+    void getPatchNotes(notesUrl, 3)
+      .then((list) => {
+        if (!cancelled) setNotes((previous) => ({ ...previous, [selectedDesktopId]: list }));
+      })
+      .catch(() => {
+        // No notes is fine: the section stays hidden.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDesktopId, notesUrl, notes]);
+
+  // Release notes for the Home "Recently updated" list: the newest few per game.
+  const homeNoteTargets = Object.entries(releases)
+    .filter(([, release]) => !!release.notesUrl)
+    .map(([id, release]) => `${id}|${release.notesUrl}`)
+    .sort()
+    .join(",");
+  useEffect(() => {
+    if (view !== "home" || !isDesktop() || !homeNoteTargets) return;
+    let cancelled = false;
+    for (const target of homeNoteTargets.split(",")) {
+      const [id, url] = target.split("|");
+      if (!id || !url || notes[id]) continue;
+      void getPatchNotes(url, 3)
+        .then((list) => {
+          if (!cancelled) setNotes((previous) => (previous[id] ? previous : { ...previous, [id]: list }));
+        })
+        .catch(() => {
+          // A game without public notes simply has no row.
+        });
+    }
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, homeNoteTargets]);
+
+  const catalog = catalogResult?.catalog ?? null;
+  const libraryIds = new Set(libraryProducts(entitlements).map((product) => product.id));
 
   async function refreshEntitlements(): Promise<void> {
     const next = await client.getEntitlements();
@@ -276,8 +431,18 @@ export function App(): JSX.Element {
     await client.signOut();
     setSession(null);
     setEntitlements({});
-    setSelected(null);
+    setGameId(null);
+    setView("library");
     setNotice("Signed out.");
+  }
+
+  function continueAsGuest(): void {
+    try {
+      localStorage.setItem(GUEST_KEY, "1");
+    } catch {
+      // Not persisted; the sign-in page shows again next start.
+    }
+    setGuest(true);
   }
 
   async function handleInstallUpdate(): Promise<void> {
@@ -296,7 +461,6 @@ export function App(): JSX.Element {
   function artifactFor(product: Product): ReleaseArtifact | null {
     const release = releases[product.id];
     if (!release) return null;
-    const platform = detectPlatform();
     const key =
       platform === "windows"
         ? "windows-x64"
@@ -314,11 +478,22 @@ export function App(): JSX.Element {
   function macBrowserDownload(product: Product): boolean {
     const artifact = artifactFor(product);
     return (
-      detectPlatform() === "macos" &&
+      platform === "macos" &&
       !!product.browserDownloadUrl &&
       canLaunchDesktop(product, entitlements) &&
       !(artifact?.sha256 && installerSupported(artifact.kind, "macos"))
     );
+  }
+
+  function canInstall(product: Product): boolean {
+    if (!isDesktop() && !demo) return false;
+    if (product.delivery !== "native") return false;
+    if (macBrowserDownload(product)) return true;
+    const artifact = artifactFor(product);
+    // Registry-detected apps are installed by their own setup, opened from the download link.
+    if (product.registryApp) return artifact !== null && platform === "windows";
+    if (!artifact?.sha256) return false;
+    return installerSupported(artifact.kind, platform);
   }
 
   /** Entitled paid product with nothing to install yet. */
@@ -331,16 +506,6 @@ export function App(): JSX.Element {
     );
   }
 
-  function canInstall(product: Product): boolean {
-    if (!isDesktop() || product.delivery !== "native") return false;
-    if (macBrowserDownload(product)) return true;
-    const artifact = artifactFor(product);
-    // Registry-detected apps are installed by their own setup, opened from the download link.
-    if (product.registryApp) return artifact !== null && detectPlatform() === "windows";
-    if (!artifact?.sha256) return false;
-    return installerSupported(artifact.kind, detectPlatform());
-  }
-
   function latestVersion(product: Product): string | null {
     return releases[product.id]?.version ?? null;
   }
@@ -351,8 +516,21 @@ export function App(): JSX.Element {
     return !!latest && isNewerVersion(latest, current);
   }
 
-  async function handleInstall(product: Product): Promise<void> {
+  function enqueueInstall(product: Product): void {
     const release = releases[product.id];
+    if (!release || !artifactFor(product)?.sha256) {
+      setNotice("No verified installer is published for this platform yet.");
+      return;
+    }
+    const kind = installed[product.id] ? (hasUpdate(product) ? "update" : "reinstall") : "install";
+    setDownloads((previous) => {
+      if (activeDownloads(previous).some((item) => item.id === product.id)) return previous;
+      const rest = previous.filter((item) => item.id !== product.id);
+      return [...rest, newDownload(product.id, product.title, kind, release.version)];
+    });
+  }
+
+  async function handleInstall(product: Product): Promise<void> {
     const artifact = artifactFor(product);
     if (macBrowserDownload(product) && product.browserDownloadUrl) {
       try {
@@ -373,45 +551,89 @@ export function App(): JSX.Element {
       }
       return;
     }
-    if (!release || !artifact || !artifact.sha256) {
-      setNotice("No verified installer is published for this platform yet.");
+    enqueueInstall(product);
+  }
+
+  // Run queued installs one at a time.
+  const startId = nextToStart(downloads);
+  useEffect(() => {
+    if (!startId) return;
+    const product = PRODUCTS_BY_ID.get(startId);
+    const release = releases[startId];
+    const artifact = product ? artifactFor(product) : null;
+    if (!product || !release || !artifact?.sha256) {
+      setDownloads((previous) =>
+        previous.map((item) =>
+          item.id === startId
+            ? { ...item, status: "failed", error: "No verified installer is published.", finishedAt: Date.now() }
+            : item,
+        ),
+      );
       return;
     }
-
-    setInstalling(product.id);
-    setInstallFraction(null);
-    try {
-      const result = await installRelease({
-        productId: product.id,
-        version: release.version,
-        url: artifact.url,
-        sha256: artifact.sha256,
-        fileName: artifact.name,
-        kind: artifact.kind,
-        commercialId: product.authenticatedDownload ? (product.productId ?? undefined) : undefined,
-      });
-      if (result.action === "opened") {
-        setNotice(
-          `Opened the ${product.title} disk image. Drag the app into Applications, then right-click it and choose Open the first time.`,
-        );
-        return;
-      }
-      setInstalled((previous) => ({
-        ...previous,
-        [product.id]: {
-          version: result.version,
-          executable: result.executable,
-          installedAt: Date.now(),
-        },
-      }));
-      setNotice(`Installed ${product.title} ${result.version}.`);
-    } catch (error) {
-      setNotice(message(error));
-    } finally {
-      setInstalling(null);
-      setInstallFraction(null);
+    setDownloads((previous) =>
+      previous.map((item) => (item.id === startId ? { ...item, status: "running" } : item)),
+    );
+    if (!isDesktop()) {
+      // The browser preview has no installer; show the failure instead of hanging.
+      setDownloads((previous) =>
+        previous.map((item) =>
+          item.id === startId
+            ? { ...item, status: "failed", error: "Installing needs the desktop launcher.", finishedAt: Date.now() }
+            : item,
+        ),
+      );
+      return;
     }
-  }
+    void installRelease({
+      productId: product.id,
+      version: release.version,
+      url: artifact.url,
+      sha256: artifact.sha256,
+      fileName: artifact.name,
+      kind: artifact.kind,
+      commercialId: product.authenticatedDownload ? (product.entitlementIds[0] ?? undefined) : undefined,
+    })
+      .then((result) => {
+        if (result.action === "opened") {
+          // A Mac disk image was opened for the player to drag into Applications.
+          setDownloads((previous) =>
+            previous.map((item) =>
+              item.id === startId ? { ...item, status: "done", finishedAt: Date.now() } : item,
+            ),
+          );
+          setNotice(
+            `Opened the ${product.title} disk image. Drag the app into Applications, then right-click it and choose Open the first time.`,
+          );
+          return;
+        }
+        setInstalled((previous) => ({
+          ...previous,
+          [product.id]: {
+            version: result.version,
+            executable: result.executable,
+            installedAt: Date.now(),
+          },
+        }));
+        setDownloads((previous) =>
+          previous.map((item) =>
+            item.id === startId ? { ...item, status: "done", finishedAt: Date.now() } : item,
+          ),
+        );
+        setNotice(`Installed ${product.title} ${result.version}.`);
+      })
+      .catch((error: unknown) => {
+        setDownloads((previous) =>
+          previous.map((item) =>
+            item.id === startId
+              ? { ...item, status: "failed", error: message(error), finishedAt: Date.now() }
+              : item,
+          ),
+        );
+        setNotice(message(error));
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startId]);
 
   async function handleLaunch(product: Product): Promise<void> {
     if (product.registryApp) {
@@ -430,14 +652,13 @@ export function App(): JSX.Element {
       }
       return;
     }
-    const platform = detectPlatform();
     const executable = executableFor(product, platform);
     if (!executable) {
       setNotice(`No ${platform} build is configured for ${product.title}.`);
       return;
     }
     if (!isDesktop()) {
-      setNotice("Launching installed games needs the desktop launcher. Use Play online in this preview.");
+      setNotice("Launching installed games needs the desktop launcher. Use Play in browser in this preview.");
       return;
     }
     setBusy(product.id);
@@ -464,184 +685,286 @@ export function App(): JSX.Element {
     }
   }
 
-  function handleBuy(product: Product): void {
-    if (!product.productId) return;
-    const url =
-      product.storeUrl ??
-      `https://lakesidegames.net/account/checkout?product=${encodeURIComponent(product.productId)}`;
+  const openUrl = useCallback((url: string, doneNotice?: string): void => {
     if (isDesktop()) {
       void openExternal(url).then(
-        () => setNotice("Checkout opened in your browser. Refresh purchases when you are done."),
+        () => {
+          if (doneNotice) setNotice(doneNotice);
+        },
         (error: unknown) => setNotice(message(error)),
       );
     } else {
       window.open(url, "_blank", "noopener,noreferrer");
     }
+  }, []);
+
+  function handleBuy(product: Product): void {
+    openUrl(product.storeUrl, "The store page opened in your browser. Refresh purchases when you are done.");
   }
 
-  function handlePrimary(product: Product): void {
-    if (product.delivery === "web") {
-      void handleWeb(product);
+  async function runBackend(label: string, action: () => Promise<void>): Promise<void> {
+    try {
+      await action();
+    } catch (error) {
+      setNotice(`${label}: ${message(error)}`);
+    }
+  }
+
+  function rowFor(product: Product): GameRow {
+    const desktopCandidate = product.companion
+      ? (PRODUCTS_BY_ID.get(product.companion) ?? null)
+      : product.delivery === "native"
+        ? product
+        : null;
+    const desktop =
+      desktopCandidate && desktopCandidate.platforms.includes(platform) ? desktopCandidate : null;
+    const owned = desktop ? canLaunchDesktop(desktop, entitlements) : false;
+    const installedVersion = desktop ? (installed[desktop.id]?.version ?? null) : null;
+    const latest = desktop ? latestVersion(desktop) : null;
+    const installable = desktop ? canInstall(desktop) : false;
+    const updateAvailable = !!desktop && hasUpdate(desktop) && installable;
+    const hasWeb = product.webUrl !== null;
+    const stateInput = {
+      owned,
+      hasDesktop: desktop !== null,
+      hasWeb,
+      installedVersion,
+      latestVersion: latest,
+      updateAvailable,
+      canInstall: installable,
+      includedWith: null,
+    };
+    const installing = desktop ? activeDownloads(downloads).find((item) => item.id === desktop.id) : undefined;
+    const fraction =
+      installing && installing.total ? Math.min(installing.downloaded / installing.total, 1) : null;
+    const canLaunch =
+      !!desktop && (desktop.registryApp === true || executableFor(desktop, platform) !== null);
+    const live = catalog ? findLive(catalog, product.liveId) : null;
+    let action = gameAction({
+      ...stateInput,
+      installing: !!installing,
+      installFraction: fraction,
+      canLaunch,
+      priceText: live ? formatPrice(live.priceCents, live.currency) : null,
+    });
+    let actionDisabled = action.kind === "none";
+    if (desktop && comingTonight(desktop) && !installing) {
+      action = {
+        kind: "none",
+        label: releaseChecked[desktop.id] ? "Coming tonight" : "Checking...",
+      };
+      actionDisabled = true;
+    } else if (desktop && macBrowserDownload(desktop) && action.kind === "install") {
+      action = { kind: "install", label: "Download for Mac" };
+    }
+    const artifact = desktop ? artifactFor(desktop) : null;
+    const detail = desktop ? details[desktop.id] : undefined;
+    const sizeBytes =
+      detail?.sizeBytes ??
+      artifact?.size ??
+      (desktop?.installSizeMb ? desktop.installSizeMb * 1024 * 1024 : null);
+    const lastPlayed = detail?.lastPlayedAt
+      ? new Date(detail.lastPlayedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+      : "-";
+    return {
+      product,
+      desktop,
+      title: product.title,
+      blurb: product.blurb,
+      state: gameState(stateInput),
+      action,
+      actionDisabled,
+      sizeText: desktop ? formatBytes(sizeBytes) : "Web",
+      lastPlayed,
+      installedVersion,
+      latestVersion: latest,
+      updateAvailable,
+      owned,
+      hasWeb,
+    };
+  }
+
+  function runAction(row: GameRow): void {
+    switch (row.action.kind) {
+      case "update":
+      case "install":
+        if (row.desktop) void handleInstall(row.desktop);
+        break;
+      case "launch":
+        if (row.desktop) void handleLaunch(row.desktop);
+        break;
+      case "web":
+        void handleWeb(row.product);
+        break;
+      case "buy":
+        handleBuy(row.product);
+        break;
+      default:
+        break;
+    }
+  }
+
+  const allRows = CATALOG.filter((product) => !product.companionOf).map(rowFor);
+  const artForSlide = useCallback((game: string): string => {
+    const rowId = SLIDE_GAME_TO_ROW[game];
+    return (rowId ? PRODUCTS_BY_ID.get(rowId)?.art : null) ?? "";
+  }, []);
+
+  function runSlideAction(action: SlideAction): void {
+    if (action.type === "store" || action.type === "news") {
+      openUrl(`https://lakesidegames.net${action.target}`);
       return;
     }
-    if (product.delivery === "native") {
-      if (canLaunchDesktop(product, entitlements)) {
-        if (comingTonight(product)) {
-          setNotice(`${product.title} is not published for this system yet.`);
-        } else if (!installed[product.id] && canInstall(product)) {
-          void handleInstall(product);
-        } else if (installed[product.id] && hasUpdate(product) && canInstall(product)) {
-          void handleInstall(product);
-        } else {
-          void handleLaunch(product);
-        }
-      } else if (product.webUrl) {
-        void handleWeb(product);
-      } else if (product.authenticatedDownload && !session) {
-        void handleSignIn("discord");
-      } else if (product.priceCents !== null) {
-        handleBuy(product);
-      }
-    }
+    const rowId = SLIDE_GAME_TO_ROW[action.target];
+    const row = rowId ? allRows.find((entry) => entry.product.id === rowId) : undefined;
+    if (!row) return;
+    // The row decides what Install, Update or Play means for this machine.
+    runAction(row);
   }
+  const rows = allRows.filter((row) => libraryIds.has(row.product.id));
+  const selectedRow = gameId ? (allRows.find((row) => row.product.id === gameId) ?? null) : null;
+  const running = activeDownloads(downloads);
+  const showSignIn = ready && !session && !guest;
 
-  function primaryLabel(product: Product): string {
-    if (product.status === "soon") return "Coming soon";
-    if (product.delivery === "web") return "Play in browser";
-    if (canLaunchDesktop(product, entitlements)) {
-      if (installing === product.id) {
-        return installFraction === null
-          ? "Installing..."
-          : `Installing ${Math.round(installFraction * 100)}%`;
-      }
-      if (installed[product.id]) {
-        if (hasUpdate(product) && canInstall(product)) return `Update to ${latestVersion(product)}`;
-        return product.authenticatedDownload ? "Play" : "Launch desktop";
-      }
-      if (macBrowserDownload(product)) return "Download for Mac";
-      if (comingTonight(product)) {
-        return releaseChecked[product.id] ? "Coming tonight" : "Checking...";
-      }
-      if (canInstall(product)) {
-        const version = latestVersion(product);
-        return version ? `Install ${version}` : "Install";
-      }
-      if (product.delivery === "native" && !product.platforms.includes(detectPlatform())) {
-        return product.webUrl ? "Play online" : "Not built for this system";
-      }
-      return "Launch desktop";
-    }
-    if (product.webUrl) return "Play online";
-    if (product.authenticatedDownload && !session) return "Sign in to install";
-    if (product.priceCents !== null) return "Buy";
-    return "Unavailable";
-  }
-
-  function chipFor(product: Product): { label: string; tone: ChipTone } {
-    if (product.status === "soon") return { label: "Coming soon", tone: "muted" };
-    if (product.delivery === "web") return { label: "Web", tone: "info" };
-    const version = installed[product.id]?.version;
-    if (version) {
-      return hasUpdate(product)
-        ? { label: "Update available", tone: "warn" }
-        : { label: `Installed ${version}`, tone: "ok" };
-    }
-    if (canLaunchDesktop(product, entitlements) && canInstall(product)) {
-      return { label: "Not installed", tone: "muted" };
-    }
-    if (product.webUrl) return { label: "Web", tone: "info" };
-    return { label: "Not installed", tone: "muted" };
-  }
-
-  const copy = VIEW_COPY[view];
+  const signedInAccountName = session?.username ?? null;
 
   return (
-    <div className={selected && view !== "account" ? "app-shell has-detail" : "app-shell"}>
-      <Sidebar
+    <div className="app">
+      <TopBar
         view={view}
-        onView={setView}
-        session={session}
-        libraryCount={library.length}
-        storeCount={store.length}
-        mode={client.mode}
-        onSignIn={(provider) => void handleSignIn(provider)}
+        onView={(next) => {
+          setView(next);
+          setGameId(null);
+        }}
+        downloadCount={running.length}
+        accountName={signedInAccountName}
+        onAccount={() => {
+          if (session) {
+            setView("account");
+            setGameId(null);
+          } else {
+            setGuest(false);
+            setView("library");
+          }
+        }}
       />
 
-      <main className="main">
-        <header className="topbar">
-          <h1>{copy.title}</h1>
-          <p>{copy.subtitle}</p>
-          <span className={`mode-pill ${client.mode}`}>
-            {client.mode === "demo" ? "Demo library" : "Live account"}
+      {updateInfo ? (
+        <div className="update-bar" role="status">
+          <span>
+            <strong>Lakeside {updateInfo.version} is available.</strong>{" "}
+            {updateInfo.notes || "A new launcher build is ready to install."}
           </span>
-        </header>
+          <button
+            type="button"
+            className="btn sm p"
+            onClick={() => void handleInstallUpdate()}
+            disabled={updating}
+          >
+            {updating
+              ? updateProgress === null
+                ? "Downloading..."
+                : `Installing ${Math.round(updateProgress * 100)}%`
+              : "Update and restart"}
+          </button>
+          <button
+            type="button"
+            className="btn sm"
+            onClick={() => setUpdateInfo(null)}
+            disabled={updating}
+          >
+            Later
+          </button>
+        </div>
+      ) : null}
 
-        {updateInfo ? (
-          <div className="update-bar" role="status">
-            <div className="update-copy">
-              <strong>Lakeside {updateInfo.version} is available</strong>
-              <span>{updateInfo.notes || "A new launcher build is ready to install."}</span>
-            </div>
-            <div className="update-actions">
-              <button
-                type="button"
-                className="btn small primary"
-                onClick={() => void handleInstallUpdate()}
-                disabled={updating}
-              >
-                {updating
-                  ? updateProgress === null
-                    ? "Downloading..."
-                    : `Installing ${Math.round(updateProgress * 100)}%`
-                  : "Update and restart"}
-              </button>
-              <button
-                type="button"
-                className="btn small ghost"
-                onClick={() => setUpdateInfo(null)}
-                disabled={updating}
-              >
-                Later
-              </button>
-            </div>
-          </div>
-        ) : null}
-
+      <main className="page">
         {!ready ? (
           <div className="loading">Loading your library...</div>
+        ) : showSignIn ? (
+          <SignInView
+            freeGames={rows.filter((row) => row.product.entitlementIds.length === 0)}
+            onSignIn={(provider) => void handleSignIn(provider)}
+            onGuest={continueAsGuest}
+          />
+        ) : view === "home" ? (
+          <HomeView
+            feed={homeFeed}
+            freeAccess={freeAccess}
+            player={playerState(rows)}
+            artFor={artForSlide}
+            onSlideAction={runSlideAction}
+            continueList={continuePlaying(rows, installed, details)}
+            recent={recentlyUpdated(
+              notes,
+              Object.fromEntries(CATALOG.map((product) => [product.id, product.companionOf ? (PRODUCTS_BY_ID.get(product.companionOf)?.title ?? product.title) : product.title])),
+            )}
+            onPlay={(row) => (row.desktop ? void handleLaunch(row.desktop) : undefined)}
+            onOpenGame={(id) => {
+              setView("library");
+              setGameId(PRODUCTS_BY_ID.get(id)?.companionOf ?? id);
+            }}
+            onLibrary={() => setView("library")}
+          />
+        ) : view === "library" && selectedRow ? (
+          <GameView
+            row={selectedRow}
+            entitlements={entitlements}
+            catalog={catalog}
+            notes={selectedRow.desktop ? (notes[selectedRow.desktop.id] ?? []) : []}
+            location={selectedRow.desktop ? (details[selectedRow.desktop.id]?.location ?? null) : null}
+            capabilities={capabilities}
+            platform={platform}
+            busy={busy === selectedRow.desktop?.id}
+            onBack={() => setGameId(null)}
+            onAction={() => runAction(selectedRow)}
+            onWeb={() => void handleWeb(selectedRow.product)}
+            onBuy={() => handleBuy(selectedRow.product)}
+            onOpenUrl={(url) => openUrl(url)}
+            onOpenFolder={() =>
+              selectedRow.desktop
+                ? void runBackend("Open folder", () => openInstallFolder(selectedRow.desktop!.id))
+                : undefined
+            }
+            canReinstall={
+              !!selectedRow.desktop && canInstall(selectedRow.desktop) && !macBrowserDownload(selectedRow.desktop)
+            }
+            onReinstall={() => (selectedRow.desktop ? void handleInstall(selectedRow.desktop) : undefined)}
+            onUninstall={() => {
+              const desktop = selectedRow.desktop;
+              if (!desktop) return;
+              void runBackend("Uninstall", async () => {
+                await uninstallProduct(desktop.id);
+                setInstalled((previous) => {
+                  const next = { ...previous };
+                  delete next[desktop.id];
+                  return next;
+                });
+                setNotice(`Uninstalled ${desktop.title}. Your saves were not touched.`);
+              });
+            }}
+          />
         ) : view === "library" ? (
           <LibraryView
-            products={library}
-            entitlements={entitlements}
-            busy={installing ?? busy}
-            onSelect={setSelected}
-            onPrimary={handlePrimary}
-            onWeb={(product) => void handleWeb(product)}
-            primaryLabel={primaryLabel}
-            chipFor={chipFor}
-            selectedId={selected?.id ?? null}
+            rows={rows}
             signedIn={session !== null}
-            onSignIn={() => void handleSignIn("discord")}
-            onBrowseStore={() => setView("store")}
+            onSelect={(row) => setGameId(row.product.id)}
+            onAction={runAction}
+            onSignIn={() => setGuest(false)}
           />
         ) : view === "store" ? (
           <StoreView
-            products={store}
+            catalog={catalog}
+            live={catalogResult?.live ?? false}
             entitlements={entitlements}
-            selectedId={selected?.id ?? null}
-            onSelect={setSelected}
-            onBuy={handleBuy}
+            products={CATALOG.filter((product) => !product.companionOf)}
             signedIn={session !== null}
-            onSignIn={() => void handleSignIn("discord")}
-          />
-        ) : (
-          <AccountView
-            session={session}
-            entitlements={entitlements}
-            mode={client.mode}
-            releases={releases}
-            onSignIn={(provider) => void handleSignIn(provider)}
-            onSignOut={() => void handleSignOut()}
+            onBuy={handleBuy}
+            onOpenUrl={(url) => openUrl(url)}
+            onOpenGame={(product) => {
+              setView("library");
+              setGameId(product.id);
+            }}
             onRefresh={() =>
               void refreshEntitlements().then(
                 () => setNotice("Purchases refreshed."),
@@ -649,31 +972,48 @@ export function App(): JSX.Element {
               )
             }
           />
+        ) : view === "downloads" ? (
+          <DownloadsView
+            items={downloads}
+            capabilities={capabilities}
+            onCancelQueued={(id) =>
+              setDownloads((previous) => previous.filter((item) => !(item.id === id && item.status === "queued")))
+            }
+            onClearFinished={() =>
+              setDownloads((previous) => previous.filter((item) => item.status === "queued" || item.status === "running"))
+            }
+            onRetry={(id) => {
+              const product = PRODUCTS_BY_ID.get(id);
+              if (product) enqueueInstall(product);
+            }}
+            onOpenFolder={() => {
+              void runBackend("Open folder", () => openInstallFolder(null));
+            }}
+            installRoot={installRoot}
+            onSetInstallRoot={async (path) => {
+              const used = await setInstallRootSetting(path);
+              setInstallRoot(used);
+              return used;
+            }}
+          />
+        ) : (
+          <AccountView
+            session={session}
+            entitlements={entitlements}
+            catalog={catalog}
+            onSignIn={(provider) => void handleSignIn(provider)}
+            onSignOut={() => void handleSignOut()}
+            onOpenUrl={(url) => openUrl(url)}
+            onRefresh={() =>
+              void refreshEntitlements().then(
+                () => setNotice("Purchases refreshed."),
+                (error: unknown) => setNotice(message(error)),
+              )
+            }
+            accountUrl={ACCOUNT_URL}
+          />
         )}
       </main>
-
-      {selected && view !== "account" ? (
-        <ProductDetail
-          product={selected}
-          entitlements={entitlements}
-          release={releases[selected.id] ?? null}
-          installedVersion={installed[selected.id]?.version ?? null}
-          updateAvailable={hasUpdate(selected)}
-          installing={installing === selected.id}
-          installFraction={installFraction}
-          canInstall={canInstall(selected)}
-          comingTonight={comingTonight(selected)}
-          primaryLabel={primaryLabel(selected)}
-          signedIn={session !== null}
-          onSignIn={() => void handleSignIn("discord")}
-          busy={busy === selected.id}
-          onClose={() => setSelected(null)}
-          onLaunch={() => void handleLaunch(selected)}
-          onInstall={() => void handleInstall(selected)}
-          onWeb={() => void handleWeb(selected)}
-          onBuy={() => handleBuy(selected)}
-        />
-      ) : null}
 
       {notice ? (
         <div className="toast" role="status">
@@ -681,9 +1021,13 @@ export function App(): JSX.Element {
         </div>
       ) : null}
 
-      <footer className="status-line">
-        {CATALOG.length} products · {isDesktop() ? "desktop shell" : "browser preview"}
-      </footer>
+      <StatusBar
+        items={downloads}
+        onOpenDownloads={() => {
+          setView("downloads");
+          setGameId(null);
+        }}
+      />
     </div>
   );
 }

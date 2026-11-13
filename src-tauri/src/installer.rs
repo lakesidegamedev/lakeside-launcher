@@ -92,6 +92,7 @@ pub fn windows_inno_executable(product_id: &str) -> Option<&'static str> {
 pub fn linux_appimage_relative(product_id: &str) -> Option<&'static str> {
     match product_id {
         "corporate-warfare" => Some("CorporateWarfare/CorporateWarfare.AppImage"),
+        "grand-century-desktop" => Some("GrandCentury/GrandCentury.AppImage"),
         _ => None,
     }
 }
@@ -324,6 +325,11 @@ pub fn account_release_url(base: &str, commercial_id: &str) -> Result<String, St
     ))
 }
 
+/// `POST <base>/account/launcher/handoff` with `{ "clientId": <id> }`.
+pub fn handoff_url(base: &str) -> String {
+    format!("{}/account/launcher/handoff", base.trim_end_matches('/'))
+}
+
 /// Pull `code` out of the handoff response. Errors never echo the body.
 pub fn parse_handoff_code(bytes: &[u8]) -> Option<String> {
     let value: serde_json::Value = serde_json::from_slice(bytes).ok()?;
@@ -508,6 +514,19 @@ mod tests {
         assert_eq!(signed_in.len(), 3);
         assert_eq!(signed_in[2], ("LAKESIDE_HANDOFF_CODE".to_string(), "abc".to_string()));
         assert_eq!(launch_env("0.5.0", Some("")).len(), 2);
+    }
+
+    #[test]
+    fn handoff_goes_to_the_launcher_endpoint_and_carries_the_code_to_the_game() {
+        assert_eq!(
+            handoff_url("https://lakesidegames.net/"),
+            "https://lakesidegames.net/account/launcher/handoff"
+        );
+        let env = launch_env("0.6.0", Some("abc"));
+        assert!(env.contains(&("LAKESIDE_HANDOFF_CODE".to_string(), "abc".to_string())));
+        assert!(env.contains(&("LAKESIDE_LAUNCHER".to_string(), "1".to_string())));
+        // Signed out: the game still starts, with no code.
+        assert!(!launch_env("0.6.0", None).iter().any(|(key, _)| key == "LAKESIDE_HANDOFF_CODE"));
     }
 
     #[test]
