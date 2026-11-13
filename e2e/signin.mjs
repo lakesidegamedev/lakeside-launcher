@@ -176,10 +176,28 @@ async function main() {
     if (toast && !/^\s*Signed in as /.test(toast)) throw new Error(`launcher shows a notice after sign-in: ${toast}`);
   });
 
-  // lakesidetest1 owns nothing: Corporate Warfare must offer Buy, never Install.
+  // lakesidetest1 owns nothing. With free access off, Corporate Warfare must offer Buy, never Install.
+  // With the free weekend on, the same account must see "Free until ..." and no Buy.
   await stage("paid-product-shows-buy", 45000, async () => {
+    const free = await (await fetch("https://lakesidegames.net/account/api/free-access")).json().catch(() => ({}));
+    const freeOn = free.on === true && (!free.endsAt || Date.parse(free.endsAt) > Date.now());
+    console.log(`free access: ${freeOn ? "on" : "off"}`);
     await launcherPage.getByRole("button", { name: "Store", exact: true }).first().click();
     const card = await cardFor("Corporate Warfare");
+    const text = (await card.textContent()) ?? "";
+    if (freeOn) {
+      if (!/Free until/.test(text) && !/Free for now/.test(text)) throw new Error("free access is on but the Store shows no Free until text");
+      if (await card.getByRole("button", { name: /^Buy/ }).count()) throw new Error("free access is on but the Store still offers Buy");
+      const library = await launcherPage.getByRole("button", { name: "Library" }).first();
+      await library.click();
+      await sleep(1000);
+      const row = launcherPage.locator("table.lib tr").filter({ hasText: "Corporate Warfare" });
+      if (!(await row.count())) throw new Error("free access is on but Corporate Warfare is not in the Library");
+      const rowText = (await row.first().textContent()) ?? "";
+      if (!/Free until|Free for now/.test(rowText)) throw new Error("Library row has no Free until text");
+      if (!(await row.first().getByRole("button", { name: /^(Install|Play)/ }).count())) throw new Error("Library row offers neither Install nor Play");
+      return;
+    }
     const action = card.getByRole("button").first();
     const label = (await action.textContent())?.trim() ?? "";
     console.log(`Corporate Warfare tile action: ${label}`);
