@@ -11,6 +11,9 @@
 
 mod home;
 mod installer;
+pub use installer::{
+    account_release_url, download_platform, parse_account_release, AccountFile, AccountRelease,
+};
 mod manage;
 mod shell;
 
@@ -454,6 +457,12 @@ fn query_param(target: &str, key: &str) -> Option<String> {
 /// game still launches. The code is never logged or stored.
 async fn fetch_handoff_code(app: &AppHandle, client_id: &str) -> Option<String> {
     let stored = read_session(app).ok().flatten()?;
+    handoff_code_for(&stored.token, client_id).await
+}
+
+/// The handoff request itself, for a bearer the caller already holds. The
+/// Linux end-to-end probe uses it too.
+pub async fn handoff_code_for(token: &str, client_id: &str) -> Option<String> {
     let client = reqwest::Client::builder()
         .user_agent("lakeside-launcher")
         .timeout(Duration::from_secs(5))
@@ -462,7 +471,7 @@ async fn fetch_handoff_code(app: &AppHandle, client_id: &str) -> Option<String> 
         .ok()?;
     let response = client
         .post(installer::handoff_url(&platform_base()))
-        .bearer_auth(&stored.token)
+        .bearer_auth(token)
         .json(&serde_json::json!({ "clientId": client_id }))
         .send()
         .await
@@ -513,6 +522,17 @@ async fn spawn_game(
     binary: &Path,
     handoff_client_id: Option<&str>,
 ) -> Result<(), String> {
+    let code = match handoff_client_id {
+        Some(client_id) => Some(fetch_handoff_code(app, client_id).await),
+        None => None,
+    };
+    spawn_game_process(binary, handoff_client_id.map(|_| code.flatten())).map(|_| ())
+}
+
+/// Start the binary detached. `handoff` is None for a game that did not opt in;
+/// Some(code) gives it the launcher environment, with the code when signed in.
+/// Returns the process id.
+pub fn spawn_game_process(binary: &Path, handoff: Option<Option<String>>) -> Result<u32, String> {
     let working_dir = binary
         .parent()
         .ok_or_else(|| "The game executable has no parent directory.".to_string())?
@@ -526,8 +546,7 @@ async fn spawn_game(
     #[cfg(target_os = "linux")]
     scrub_appimage_env(&mut command);
 
-    if let Some(client_id) = handoff_client_id {
-        let code = fetch_handoff_code(app, client_id).await;
+    if let Some(code) = handoff {
         command.env_remove("LAKESIDE_HANDOFF_CODE");
         for (key, value) in installer::launch_env(env!("CARGO_PKG_VERSION"), code.as_deref()) {
             command.env(key, value);
@@ -548,6 +567,7 @@ async fn spawn_game(
                 child.id(),
                 binary.file_name().and_then(|name| name.to_str()).unwrap_or("?")
             ));
+            child.id()
         })
         .map_err(|error| format!("Could not start the game: {error}"))
 }
