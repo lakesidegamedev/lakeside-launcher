@@ -25,9 +25,10 @@ describe("free access", () => {
     const paid = CATALOG.filter((product) => product.entitlementIds.length > 0);
     expect(paid.length).toBeGreaterThan(0);
     expect(freeGrantedIds(live, {}, CATALOG, now).size).toBe(paid.length);
-    const owned = { [paid[0].entitlementIds[0]]: "owned" as const };
-    expect(freeGrantedIds(live, owned, CATALOG, now).has(paid[0].id)).toBe(false);
+    const first = paid[0]!;
+    const owned = { [first.entitlementIds[0]!]: "owned" as const };
+    expect(freeGrantedIds(live, owned, CATALOG, now).has(first.id)).toBe(false);
     const merged = withFreeAccess(live, {}, CATALOG, now);
-    for (const product of paid) expect(merged[product.entitlementIds[0]]).toBe("owned");
+    for (const product of paid) expect(merged[product.entitlementIds[0]!]).toBe("owned");
   });
 });
