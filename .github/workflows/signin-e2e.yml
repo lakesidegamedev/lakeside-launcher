@@ -1,6 +1,8 @@
 name: signin e2e
 
 on:
+  push:
+    branches: [ci/signin-e2e]
   workflow_dispatch:
     inputs:
       version:
@@ -31,7 +33,7 @@ jobs:
       - name: Install the released launcher
         shell: pwsh
         env:
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ inputs.version || '0.4.1' }}
         run: |
           $ProgressPreference = 'SilentlyContinue'
           $url = "https://lakesidegames.net/download/launcher/Lakeside_${env:VERSION}_x64-setup.exe"
