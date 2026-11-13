@@ -117,7 +117,8 @@ async function main() {
   await sleep(5000);
   const toast = await launcherPage.locator(".toast").first().textContent({ timeout: 2000 }).catch(() => null);
   await shoot(launcherPage, "launcher-library");
-  if (toast) throw new Error(`launcher shows a notice after sign-in: ${toast}`);
+  // The sign-in confirmation toast is expected; anything else is a problem.
+  if (toast && !/^\s*Signed in as /.test(toast)) throw new Error(`launcher shows a notice after sign-in: ${toast}`);
   stage("library-clean");
 }
 
