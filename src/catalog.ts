@@ -289,10 +289,11 @@ export function canLaunchDesktop(product: Product, entitlements: Entitlements): 
   return product.delivery === "native" && ownsProduct(product, entitlements);
 }
 
-/** Installer kinds the launcher can run, per platform. Dmg is out of scope. */
+/** Installer kinds the launcher can run, per platform. A Mac disk image is opened for the player. */
 export function installerSupported(kind: string, platform: Platform): boolean {
   if (platform === "windows") return kind === "nsis" || kind === "inno";
   if (platform === "linux") return kind === "appimage";
+  if (platform === "macos") return kind === "dmg";
   return false;
 }
 

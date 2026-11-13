@@ -220,8 +220,8 @@ export function ProductDetail({
           ) : null}
           {installedVersion && updateAvailable && !canInstall ? (
             <p className="detail-note">
-              Version {release?.version ?? "newer"} is available, but automatic installation is
-              Windows-only. Download it from the release page.
+              Version {release?.version ?? "newer"} is available, but this launcher cannot install it
+              on your system. Download it from the release page.
             </p>
           ) : null}
           {product.delivery === "content" ? (

@@ -119,7 +119,7 @@ export interface InstallProgress {
 export interface InstallResult {
   version: string;
   executable: string;
-  action: "install" | "update" | "reinstall";
+  action: "install" | "update" | "reinstall" | "opened";
 }
 
 export interface InstalledProduct {

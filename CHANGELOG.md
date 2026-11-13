@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- The launcher now builds for macOS (Apple silicon and Intel) and Linux
+  (AppImage and .deb). These builds are unsigned; on a Mac, right-click the app
+  and choose Open the first time.
+- On a Mac, Corporate Warfare downloads as a checked disk image and opens for
+  you to drag into Applications.
+- Games with no build for your system say so on the tile.
+
 ## 0.5.0
 
 - Corporate Warfare can be bought and installed from the launcher. If you own

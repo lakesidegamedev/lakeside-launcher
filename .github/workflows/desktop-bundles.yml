@@ -1,5 +1,8 @@
 name: desktop bundles
 
+# Builds run on version tags and manual dispatch only, never on every push, so
+# the expensive macOS runner minutes stay low. Pull requests get a Linux smoke
+# check from verify.yml instead. All macOS and Linux bundles are unsigned.
 on:
   workflow_dispatch:
   push:
@@ -76,6 +79,17 @@ jobs:
           Copy-Item src-tauri/target/release/bundle/nsis/*.exe artifacts/
           Copy-Item src-tauri/target/release/bundle/nsis/*.exe.sig artifacts/
 
+      - name: Smoke check (starts, window loads, exits)
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath artifacts/Lakeside.exe -ArgumentList '--smoke' -PassThru
+          if (-not $process.WaitForExit(120000)) {
+            $process.Kill()
+            throw 'smoke: the launcher did not exit within 120 s'
+          }
+          if ($process.ExitCode -ne 0) { throw "smoke: exit code $($process.ExitCode)" }
+          Write-Host 'smoke: the launcher window loaded and exited cleanly'
+
       - name: Verify Authenticode signature
         if: steps.signing.outputs.enabled == 'true'
         shell: pwsh
@@ -91,5 +105,125 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: lakeside-windows-x64
+          path: artifacts/*
+          if-no-files-found: error
+
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xvfb libfuse2 xdg-utils
+
+      - run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0.6.2
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          args: --bundles appimage,deb
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p artifacts
+          cp src-tauri/target/release/bundle/appimage/*.AppImage artifacts/
+          cp src-tauri/target/release/bundle/appimage/*.AppImage.sig artifacts/
+          cp src-tauri/target/release/bundle/deb/*.deb artifacts/
+          (cd artifacts && sha256sum * > SHA256SUMS.txt && ls -l)
+
+      - name: Smoke check, AppImage
+        run: |
+          chmod +x artifacts/*.AppImage
+          APPIMAGE_EXTRACT_AND_RUN=1 timeout 150 xvfb-run -a artifacts/*.AppImage --smoke
+
+      - name: Smoke check, deb
+        run: |
+          sudo apt-get install -y ./artifacts/*.deb
+          package="$(dpkg-deb -f artifacts/*.deb Package)"
+          binary="$(dpkg -L "$package" | grep '^/usr/bin/' | head -n 1)"
+          echo "binary: $binary"
+          timeout 150 xvfb-run -a "$binary" --smoke
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lakeside-linux-x64
+          path: artifacts/*
+          if-no-files-found: error
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - run: npm ci
+
+      # One universal build (Apple silicon plus Intel) feeds both darwin
+      # entries of the update feed.
+      - uses: tauri-apps/tauri-action@v0.6.2
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          args: --target universal-apple-darwin --bundles dmg,app
+
+      - name: Collect artifacts
+        run: |
+          bundle=src-tauri/target/universal-apple-darwin/release/bundle
+          mkdir -p artifacts
+          cp "$bundle"/dmg/*.dmg artifacts/
+          cp "$bundle"/macos/*.app.tar.gz artifacts/
+          cp "$bundle"/macos/*.app.tar.gz.sig artifacts/
+          (cd artifacts && shasum -a 256 * > SHA256SUMS.txt && ls -l)
+
+      - name: Smoke check (starts, window loads, exits)
+        run: |
+          mount="$RUNNER_TEMP/lakeside-dmg"
+          mkdir -p "$mount"
+          hdiutil attach artifacts/*.dmg -mountpoint "$mount" -nobrowse -quiet
+          app="$(ls -d "$mount"/*.app | head -n 1)"
+          binary="$(ls "$app"/Contents/MacOS/* | head -n 1)"
+          echo "binary: $binary"
+          lipo -archs "$binary"
+          "$binary" --smoke
+          echo "smoke: Apple silicon slice loaded and exited cleanly"
+          if arch -x86_64 /usr/bin/true 2>/dev/null; then
+            arch -x86_64 "$binary" --smoke
+            echo "smoke: Intel slice loaded and exited cleanly"
+          else
+            echo "smoke: Rosetta is not available on this runner, Intel slice not run"
+          fi
+          hdiutil detach "$mount" -quiet
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lakeside-macos-universal
           path: artifacts/*
           if-no-files-found: error

@@ -57,7 +57,7 @@ struct InstallProgress {
 pub struct InstallResult {
     pub version: String,
     pub executable: String,
-    /// "install", "update" or "reinstall".
+    /// "install", "update", "reinstall", or "opened" for a disk image shown to the player.
     pub action: String,
 }
 
@@ -388,6 +388,8 @@ async fn spawn_game(
     command.stdin(std::process::Stdio::null());
     command.stdout(std::process::Stdio::null());
     command.stderr(std::process::Stdio::null());
+    #[cfg(target_os = "linux")]
+    scrub_appimage_env(&mut command);
 
     if let Some(client_id) = handoff_client_id {
         let code = fetch_handoff_code(app, client_id).await;
@@ -567,7 +569,9 @@ fn open_external(url: String) -> Result<(), String> {
 
     #[cfg(target_os = "linux")]
     {
-        return std::process::Command::new("xdg-open")
+        let mut command = std::process::Command::new("xdg-open");
+        scrub_appimage_env(&mut command);
+        return command
             .arg(parsed.as_str())
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
@@ -963,12 +967,17 @@ where
         installer::InstallerKind::AppImage => installer::linux_appimage_relative(product_id)
             .ok_or_else(|| "Automatic installation is not configured for this product.".to_string())?
             .to_string(),
-        installer::InstallerKind::Dmg => {
-            return Err("Mac disk images are not installed automatically.".to_string())
-        }
+        // A disk image is opened for the player; nothing is installed or tracked.
+        installer::InstallerKind::Dmg => String::new(),
     };
 
-    let directory = std::env::temp_dir().join("lakeside-launcher-downloads");
+    // A disk image stays in Downloads so it is still there when the player
+    // drags the app out of it. Everything else is a temporary file.
+    let directory = if parsed_kind == installer::InstallerKind::Dmg {
+        downloads_dir()
+    } else {
+        std::env::temp_dir().join("lakeside-launcher-downloads")
+    };
     let destination = directory.join(&safe_name);
     let actual = match download_to_file(&source, &destination, &on_progress).await {
         Ok(actual) => actual,
@@ -1029,8 +1038,16 @@ where
         installer::InstallerKind::AppImage => {
             place_appimage(&destination, &install_root, product_id).await
         }
-        installer::InstallerKind::Dmg => Err("Mac disk images are not installed automatically.".to_string()),
+        installer::InstallerKind::Dmg => open_disk_image(&destination),
     };
+    if parsed_kind == installer::InstallerKind::Dmg {
+        outcome?;
+        return Ok(InstallResult {
+            version: version.to_string(),
+            executable,
+            action: "opened".to_string(),
+        });
+    }
     let _ = tokio::fs::remove_file(&destination).await;
     outcome?;
 
@@ -1047,6 +1064,55 @@ where
         }
         .to_string(),
     })
+}
+
+/// The player's Downloads folder, or the temp directory when there is none.
+fn downloads_dir() -> PathBuf {
+    std::env::var_os("HOME")
+        .map(|home| PathBuf::from(home).join("Downloads"))
+        .filter(|dir| dir.is_dir())
+        .unwrap_or_else(|| std::env::temp_dir().join("lakeside-launcher-downloads"))
+}
+
+/// Mount a verified disk image in Finder so the player can drag the app out.
+fn open_disk_image(image: &Path) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(image)
+            .status()
+            .map_err(|error| format!("Could not open the disk image: {error}"))
+            .and_then(|status| {
+                if status.success() {
+                    Ok(())
+                } else {
+                    Err("The disk image would not open.".to_string())
+                }
+            })
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = image;
+        Err("Disk images can only be opened on a Mac.".to_string())
+    }
+}
+
+/// An AppImage launcher exports library paths for its own bundled libraries.
+/// Child processes (the browser, a game AppImage) must not inherit them.
+#[cfg(target_os = "linux")]
+fn scrub_appimage_env(command: &mut std::process::Command) {
+    for key in [
+        "LD_LIBRARY_PATH",
+        "LD_PRELOAD",
+        "APPDIR",
+        "APPIMAGE",
+        "ARGV0",
+        "OWD",
+        "GDK_PIXBUF_MODULE_FILE",
+        "GIO_EXTRA_MODULES",
+    ] {
+        command.env_remove(key);
+    }
 }
 
 /// Copy a verified AppImage into the per-user data directory, mark it
@@ -1284,7 +1350,9 @@ async fn install_release(
     )
     .await?;
 
-    let _ = record_install(&app, &product_id, &result.version, &result.executable);
+    if !result.executable.is_empty() {
+        let _ = record_install(&app, &product_id, &result.version, &result.executable);
+    }
     Ok(result)
 }
 
@@ -1477,10 +1545,30 @@ fn platform_sign_out(app: AppHandle) -> Result<(), String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let headless_update = std::env::args().any(|argument| argument == "--headless-update");
+    // CI smoke check: exit 0 once the main window has loaded, 2 if it never does.
+    let smoke = std::env::args().any(|argument| argument == "--smoke");
+    if smoke {
+        std::thread::spawn(|| {
+            std::thread::sleep(Duration::from_secs(90));
+            eprintln!("smoke-timeout the window did not finish loading");
+            std::process::exit(2);
+        });
+    }
 
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init());
+
+    if smoke {
+        builder = builder.on_page_load(|webview, payload| {
+            if webview.label() == "main"
+                && matches!(payload.event(), tauri::webview::PageLoadEvent::Finished)
+            {
+                println!("smoke-loaded {}", payload.url());
+                webview.app_handle().exit(0);
+            }
+        });
+    }
 
     if headless_update {
         builder = builder.setup(|app| {
