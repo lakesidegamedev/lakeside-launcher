@@ -1,0 +1,37 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Home</title><link rel="stylesheet" href="launcher.css"><link rel="stylesheet" href="home.css"></head><body><div class="top"><div class="brand"><img src="assets/lakeside-mark.svg" alt="">Lakeside Games</div>
+<a class="tab on">Home</a><a class="tab">Library</a><a class="tab">Store</a><a class="tab">Downloads<span class="n">2</span></a><a class="tab">News</a>
+<a class="acct"><span class="av">K</span>kepler</a></div><main>
+<section class="car" aria-roledescription="carousel" aria-label="What is new">
+<div class="slide on" role="group" aria-roledescription="slide" aria-label="1 of 5" data-action="Open store page"><div class="txt"><span class="kind"><span class="dot" style="background:var(--cw)"></span>New release</span><h2 class="hl">Corporate Warfare 2.0 is out</h2><p>$14.99, or included with any supporter tier.</p><a class="btn p" href="#" tabindex="0">Get it on the store</a></div><img class="art" src="assets/cw-goods.jpg" alt=""></div>
+<div class="slide" role="group" aria-roledescription="slide" aria-label="2 of 5" data-action="Update"><div class="txt"><span class="kind"><span class="dot" style="background:var(--ahd)"></span>Update ready</span><h2 class="hl">A House Divided 1.19.0 is ready</h2><p>Every sale has a buyer. You have 1.18.0.</p><a class="btn p" href="#" tabindex="0">Update</a></div><img class="art" src="assets/ahd-map.webp" alt=""></div>
+<div class="slide" role="group" aria-roledescription="slide" aria-label="3 of 5" data-action="Open store page"><div class="txt"><span class="kind"><span class="dot" style="background:var(--ahd)"></span>Free to play</span><h2 class="hl">Everything is free to play while A House Divided is paused</h2><p>A House Divided is paused before its 2027 world opens.</p><a class="btn p" href="#" tabindex="0">See what is free</a></div><img class="art" src="assets/ahd-map.webp" alt=""></div>
+<div class="slide" role="group" aria-roledescription="slide" aria-label="4 of 5" data-action="Open store page"><div class="txt"><span class="kind"><span class="dot" style="background:var(--mov)"></span>Country pack</span><h2 class="hl">New country pack for Margin of Victory</h2><p>Margin of Victory 2.0 covers 121 elections in 14 countries.</p><a class="btn p" href="#" tabindex="0">Open the pack</a></div><img class="art" src="assets/mov-night.jpg" alt=""></div>
+<div class="slide" role="group" aria-roledescription="slide" aria-label="5 of 5" data-action="Play"><div class="txt"><span class="kind"><span class="dot" style="background:var(--gc)"></span>Studio news</span><h2 class="hl">Grand Century is in early access</h2><p>Play it in the browser now. The desktop version is in progress.</p><a class="btn p" href="#" tabindex="0">Play in browser</a></div><img class="art" src="assets/gc-world.webp" alt=""></div>
+<div class="ctl"><button class="arrow" aria-label="Previous slide">&#8249;</button><button class="arrow" aria-label="Next slide">&#8250;</button><div class="dots"><button class="dot2 on" aria-label="Slide 1: New release"></button><button class="dot2" aria-label="Slide 2: Update ready"></button><button class="dot2" aria-label="Slide 3: Free to play"></button><button class="dot2" aria-label="Slide 4: Country pack"></button><button class="dot2" aria-label="Slide 5: Studio news"></button></div><span class="count" id="count">1 of 5</span></div></section>
+<div class="cols"><div><h2>Continue playing</h2>
+<table class="sm"><tr><td><div class="g"><img class="thumb" src="assets/ahd-map.webp" alt=""><div><b><span class="dot" style="background:var(--ahd)"></span> A House Divided</b></div></div></td><td class="rel">Today</td><td class="r"><a class="btn p sm">Update</a></td></tr>
+<tr><td><div class="g"><img class="thumb" src="assets/mov-night.jpg" alt=""><div><b><span class="dot" style="background:var(--mov)"></span> Margin of Victory</b></div></div></td><td class="rel">2 days ago</td><td class="r"><a class="btn p sm">Play</a></td></tr>
+<tr><td><div class="g"><img class="thumb" src="assets/cw-goods.jpg" alt=""><div><b><span class="dot" style="background:var(--cw)"></span> Corporate Warfare</b></div></div></td><td class="rel">Nov 9</td><td class="r"><a class="btn p sm">Play</a></td></tr></table></div>
+<div><h2>Recently updated</h2>
+<table class="sm"><tr><td><b>Corporate Warfare 2.0</b></td><td class="rel">Nov 12</td></tr>
+<tr><td><b>Margin of Victory 2.0</b></td><td class="rel">Nov 12</td></tr>
+<tr><td><b>A House Divided 1.19: Every sale has a buyer</b></td><td class="rel">Nov 10</td></tr>
+<tr><td><b>Grand Century 1.7: The Long Century</b></td><td class="rel">Sep 2</td></tr></table></div></div>
+<p class="more">All 5 games are in your <a>Library</a>.</p></main>
+<div class="status"><span><b>Downloading</b> A House Divided 1.19.0</span><span class="bar"><i style="width:62%"></i></span><span>62%, 8.4 MB/s</span><span class="muted">1 more waiting</span><span class="sp">Downloads</span></div>
+<script>
+(function(){
+var sl=[].slice.call(document.querySelectorAll(".slide")),dots=[].slice.call(document.querySelectorAll(".dot2")),car=document.querySelector(".car"),cnt=document.getElementById("count"),i=0,paused=false,t=null;
+var reduced=matchMedia("(prefers-reduced-motion: reduce)").matches;
+function go(n){i=(n+sl.length)%sl.length;sl.forEach(function(s,k){s.classList.toggle("on",k==i)});dots.forEach(function(d,k){d.classList.toggle("on",k==i)});cnt.textContent=(i+1)+" of "+sl.length}
+function run(){clearInterval(t);if(reduced||paused||document.hidden)return;t=setInterval(function(){go(i+1)},7000)}
+car.addEventListener("mouseenter",function(){paused=true;run()});car.addEventListener("mouseleave",function(){paused=false;run()});
+car.addEventListener("focusin",function(){paused=true;run()});car.addEventListener("focusout",function(){paused=false;run()});
+document.addEventListener("visibilitychange",run);
+document.querySelectorAll(".arrow")[0].onclick=function(){go(i-1)};document.querySelectorAll(".arrow")[1].onclick=function(){go(i+1)};
+dots.forEach(function(d,k){d.onclick=function(){go(k)}});
+car.tabIndex=0;car.addEventListener("keydown",function(e){if(e.key=="ArrowLeft")go(i-1);if(e.key=="ArrowRight")go(i+1)});
+var m=/slide=(\d)/.exec(location.search);if(m){go(+m[1]-1);reduced=true}
+run();
+})();
+</script></body></html>
