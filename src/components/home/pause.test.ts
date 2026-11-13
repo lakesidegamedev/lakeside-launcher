@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { blurLeaves, indexForKey, initialPause, pauseReducer, type PauseEvent } from "./pause";
-import { shouldAutoAdvance } from "./slides";
+import {
+  blurLeaves,
+  indexForKey,
+  initialPause,
+  isHeld,
+  keyIntent,
+  pauseReducer,
+  shouldAutoAdvance,
+  type PauseEvent,
+} from "./pause";
 
 function run(events: PauseEvent[], hidden = false) {
   return events.reduce(pauseReducer, initialPause(hidden));
@@ -63,5 +71,21 @@ describe("carousel pause handlers", () => {
     expect(indexForKey("ArrowLeft", 0, 3)).toBe(2);
     expect(indexForKey("Enter", 0, 3)).toBeNull();
     expect(indexForKey("ArrowLeft", 0, 0)).toBeNull();
+  });
+
+  it("holds the animations (not only the timer) while hovered, focused or hidden", () => {
+    expect(isHeld(run([]))).toBe(false);
+    expect(isHeld(run([{ type: "mouseenter" }]))).toBe(true);
+    expect(isHeld(run([{ type: "focus" }]))).toBe(true);
+    expect(isHeld(run([], true))).toBe(true);
+  });
+
+  it("Enter runs the primary action only when the showcase itself has focus", () => {
+    expect(keyIntent("Enter", 1, 3, true)).toEqual({ type: "activate" });
+    expect(keyIntent("Enter", 1, 3, false)).toBeNull();
+    expect(keyIntent("Enter", 0, 0, true)).toBeNull();
+    expect(keyIntent("ArrowRight", 2, 3, false)).toEqual({ type: "go", index: 0 });
+    expect(keyIntent("ArrowLeft", 0, 3, true)).toEqual({ type: "go", index: 2 });
+    expect(keyIntent("a", 0, 3, true)).toBeNull();
   });
 });

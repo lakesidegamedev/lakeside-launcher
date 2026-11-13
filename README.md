@@ -8,9 +8,13 @@ entitlements, and one-click AHDClient install/update on Windows.
 
 ## Screenshots
 
-| Home | Library |
+| Home, with live events | Home, no live events |
 | --- | --- |
-| ![Home](docs/screenshots/home.jpg) | ![Library](docs/screenshots/library.jpg) |
+| ![Home with live events](docs/screenshots/home-c.jpg) | ![Home without live events](docs/screenshots/home-b.jpg) |
+
+| Home, below the showcase | Library |
+| --- | --- |
+| ![Home below the showcase](docs/screenshots/home-below.jpg) | ![Library](docs/screenshots/library.jpg) |
 
 | Game page | Store |
 | --- | --- |
@@ -20,10 +24,10 @@ entitlements, and one-click AHDClient install/update on Windows.
 | --- | --- |
 | ![Downloads](docs/screenshots/downloads.jpg) | ![Account](docs/screenshots/account.jpg) |
 
-## Download (Windows, 0.6.0)
+## Download (Windows, 0.7.0)
 
-- Installer: [Lakeside_0.6.0_x64-setup.exe](https://github.com/lakesidegamedev/lakeside-launcher/releases/download/v0.6.0/Lakeside_0.6.0_x64-setup.exe)
-- Portable: [Lakeside.exe](https://github.com/lakesidegamedev/lakeside-launcher/releases/download/v0.6.0/Lakeside.exe)
+- Installer: [Lakeside_0.7.0_x64-setup.exe](https://github.com/lakesidegamedev/lakeside-launcher/releases/download/v0.7.0/Lakeside_0.7.0_x64-setup.exe)
+- Portable: [Lakeside.exe](https://github.com/lakesidegamedev/lakeside-launcher/releases/download/v0.7.0/Lakeside.exe)
 
 The build is currently unsigned, so SmartScreen warns once. The release
 workflow signs and timestamps both binaries automatically as soon as the

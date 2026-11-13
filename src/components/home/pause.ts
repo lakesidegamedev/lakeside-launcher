@@ -46,3 +46,32 @@ export function indexForKey(key: string, index: number, count: number): number |
   if (key === "ArrowRight") return (index + 1) % count;
   return null;
 }
+
+/** The slide timer runs only when nothing says to hold still. Reduced motion means no timer at all. */
+export function shouldAutoAdvance(o: {
+  reducedMotion: boolean;
+  hovered: boolean;
+  focused: boolean;
+  hidden: boolean;
+  count: number;
+}): boolean {
+  return o.count > 1 && !o.reducedMotion && !isHeld(o);
+}
+
+/** Hover, focus or a hidden window holds the slide (and its animations) where it is. */
+export function isHeld(state: PauseState): boolean {
+  return state.hovered || state.focused || state.hidden;
+}
+
+export type KeyIntent = { type: "go"; index: number } | { type: "activate" };
+
+/**
+ * Left and Right change slide. Enter runs the primary action, but only when the
+ * showcase itself has focus: a focused button already handles its own Enter.
+ */
+export function keyIntent(key: string, index: number, count: number, onShowcase: boolean): KeyIntent | null {
+  const next = indexForKey(key, index, count);
+  if (next !== null) return { type: "go", index: next };
+  if (key === "Enter" && onShowcase && count > 0) return { type: "activate" };
+  return null;
+}

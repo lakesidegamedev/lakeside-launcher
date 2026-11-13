@@ -64,17 +64,16 @@ import { AccountView } from "./components/AccountView";
 import { SignInView } from "./components/SignInView";
 import { StatusBar } from "./components/StatusBar";
 import { HomeView } from "./components/HomeView";
-import type { HomeFeed, SlideAction } from "./components/home/slides";
+import type { ActionType, HomeFeed } from "./components/home/slides";
 import { loadFreeAccess, loadHomeFeed } from "./lib/homeFeed";
 import {
   FREE_ACCESS_OFF,
-  freeAccessActive,
   freeGrantedIds,
   freeUntilText,
   withFreeAccess,
   type FreeAccess,
 } from "./lib/freeAccess";
-import { SLIDE_GAME_TO_ROW, continuePlaying, playerState, recentlyUpdated } from "./lib/home";
+import { SLIDE_GAME_TO_ROW, accountSummary, continuePlaying, playerState, recentlyUpdated } from "./lib/home";
 
 const GUEST_KEY = "lakeside.launcher.guest";
 const ACCOUNT_URL = "https://lakesidegames.net/account";
@@ -166,17 +165,36 @@ export function App(): JSX.Element {
     };
   }, []);
 
-  // Home slides and the free-access switch.
+  // Home slides, events and the free-access switch. They are read again when the
+  // window comes back into focus (at most once a minute) and every ten minutes,
+  // so a new event or the end of free access shows up without a restart.
   useEffect(() => {
     let cancelled = false;
-    void loadHomeFeed().then((result) => {
-      if (!cancelled) setHomeFeed(result.feed);
-    });
-    void loadFreeAccess().then((on) => {
-      if (!cancelled) setFreeAccess(on);
-    });
+    let last = 0;
+    const refresh = (force: boolean) => {
+      const at = Date.now();
+      if (!force && at - last < 60_000) return;
+      last = at;
+      void loadHomeFeed().then((result) => {
+        if (!cancelled) setHomeFeed(result.feed);
+      });
+      void loadFreeAccess().then((on) => {
+        if (!cancelled) setFreeAccess(on);
+      });
+    };
+    refresh(true);
+    const onFocus = () => refresh(false);
+    const onVisible = () => {
+      if (!document.hidden) refresh(false);
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisible);
+    const timer = setInterval(() => refresh(true), 600_000);
     return () => {
       cancelled = true;
+      clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, []);
 
@@ -819,12 +837,7 @@ export function App(): JSX.Element {
   }
 
   const allRows = CATALOG.filter((product) => !product.companionOf).map(rowFor);
-  const artForSlide = useCallback((game: string): string => {
-    const rowId = SLIDE_GAME_TO_ROW[game];
-    return (rowId ? PRODUCTS_BY_ID.get(rowId)?.art : null) ?? "";
-  }, []);
-
-  function runSlideAction(action: SlideAction): void {
+  function runSlideAction(action: { type: ActionType; target: string }): void {
     if (action.type === "store" || action.type === "news") {
       openUrl(`https://lakesidegames.net${action.target}`);
       return;
@@ -892,7 +905,7 @@ export function App(): JSX.Element {
         </div>
       ) : null}
 
-      <main className="page">
+      <main className={view === "home" && ready && !showSignIn ? "page flush" : "page"}>
         {!ready ? (
           <div className="loading">Loading your library...</div>
         ) : showSignIn ? (
@@ -904,21 +917,28 @@ export function App(): JSX.Element {
         ) : view === "home" ? (
           <HomeView
             feed={homeFeed}
-            freeAccess={freeAccessActive(freeAccess)}
+            freeAccess={freeAccess}
             player={playerState(rows)}
-            artFor={artForSlide}
             onSlideAction={runSlideAction}
             continueList={continuePlaying(rows, installed, details)}
             recent={recentlyUpdated(
               notes,
               Object.fromEntries(CATALOG.map((product) => [product.id, product.companionOf ? (PRODUCTS_BY_ID.get(product.companionOf)?.title ?? product.title) : product.title])),
+              5,
             )}
+            account={session ? accountSummary(session.username, catalog, serverEntitlements, freeText) : null}
+            libraryCount={rows.length}
             onPlay={(row) => (row.desktop ? void handleLaunch(row.desktop) : undefined)}
+            onUpdate={(row) => runAction(row)}
             onOpenGame={(id) => {
               setView("library");
               setGameId(PRODUCTS_BY_ID.get(id)?.companionOf ?? id);
             }}
             onLibrary={() => setView("library")}
+            onAccount={() => {
+              setView("account");
+              setGameId(null);
+            }}
           />
         ) : view === "library" && selectedRow ? (
           <GameView

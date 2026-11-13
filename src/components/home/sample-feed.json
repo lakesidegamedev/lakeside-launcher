@@ -1,42 +1,279 @@
 {
   "version": 1,
-  "generated": "2026-11-13T05:00:00Z",
+  "generated": "2026-11-13T12:00:00Z",
   "slides": [
     {
-      "id": "cw-2-0-release",
+      "id": "ahd-120-opens",
       "kind": "release",
-      "game": "cw",
-      "headline": "Corporate Warfare 2.0 is out",
-      "line": "$14.99, or included with Supporter+.",
-      "art": "https://lakesidegames.net/store/assets/cw-goods.jpg",
-      "action": { "type": "store", "target": "/store/corporate-warfare" },
+      "game": "ahd",
+      "badge": "1.20",
+      "kicker": "Opens Sunday",
+      "headline": "The 2027 world",
+      "line": "United States and Canada. Opens Sunday at 5:00 PM Eastern, with turns from Monday at 5:00 PM.",
+      "tile": "The 2027 world opens Sunday",
+      "art": "bundled:ahd",
+      "focus": {
+        "x": 62,
+        "y": 50
+      },
+      "action": {
+        "type": "install",
+        "target": "ahd",
+        "label": "Install",
+        "fallback": {
+          "type": "store",
+          "target": "/store/a-house-divided",
+          "label": "Open store page"
+        }
+      },
+      "secondary": {
+        "type": "news",
+        "target": "/news/state-of-the-game-november-2026/",
+        "label": "Read the post"
+      },
       "starts": "2026-11-13T00:00:00Z",
-      "ends": "2026-12-13T00:00:00Z",
+      "ends": "2026-11-15T22:00:00Z",
+      "priority": 10,
+      "replacedBy": "ahd-120-countdown"
+    },
+    {
+      "id": "ahd-120-open",
+      "kind": "release",
+      "game": "ahd",
+      "badge": "1.20",
+      "kicker": "Open now",
+      "headline": "The 2027 world is open",
+      "line": "United States and Canada. Turns run from Monday at 5:00 PM Eastern.",
+      "tile": "The 2027 world is open",
+      "art": "bundled:ahd",
+      "focus": {
+        "x": 62,
+        "y": 50
+      },
+      "action": {
+        "type": "play",
+        "target": "ahd",
+        "label": "Play",
+        "fallback": {
+          "type": "store",
+          "target": "/store/a-house-divided",
+          "label": "Open store page"
+        }
+      },
+      "secondary": {
+        "type": "news",
+        "target": "/news/state-of-the-game-november-2026/",
+        "label": "Read the post"
+      },
+      "starts": "2026-11-15T22:00:00Z",
+      "ends": "2027-02-01T00:00:00Z",
       "priority": 10
     },
     {
-      "id": "free-access-2026-11",
+      "id": "studio-free-weekend",
       "kind": "free",
-      "game": "ahd",
-      "headline": "Everything is free to play while A House Divided is paused",
-      "line": "A House Divided is paused before its 2027 world opens.",
-      "art": "https://lakesidegames.net/store/assets/ahd-map.webp",
-      "action": { "type": "store", "target": "/store" },
+      "game": "studio",
+      "kicker": "Free this weekend",
+      "headline": "Our games are leaving alpha",
+      "line": "Everything is free until Monday at 5:00 PM Eastern.",
+      "tile": "Everything is free until Monday",
+      "art": "bundled:alpha",
+      "focus": {
+        "x": 72,
+        "y": 50
+      },
+      "action": {
+        "type": "play",
+        "target": "cw",
+        "label": "Play free",
+        "fallback": {
+          "type": "store",
+          "target": "/store/corporate-warfare",
+          "label": "Open store page"
+        }
+      },
+      "secondary": {
+        "type": "news",
+        "target": "/news/state-of-the-game-november-2026/",
+        "label": "Read the post"
+      },
       "starts": "2026-11-13T00:00:00Z",
-      "ends": "2026-12-13T00:00:00Z",
+      "ends": "2026-11-16T22:00:00Z",
+      "priority": 15,
+      "replacedBy": "free-weekend"
+    },
+    {
+      "id": "cw-2-0-rivals",
+      "kind": "release",
+      "game": "cw",
+      "badge": "2.0",
+      "kicker": "Out now",
+      "headline": "Rivals",
+      "line": "3D city maps, plant models and live goods markets. $14.99, or included with Supporter+.",
+      "tile": "Rivals",
+      "art": "bundled:cw",
+      "focus": {
+        "x": 62,
+        "y": 50
+      },
+      "action": {
+        "type": "install",
+        "target": "cw",
+        "label": "Install",
+        "fallback": {
+          "type": "store",
+          "target": "/store/corporate-warfare",
+          "label": "Get Corporate Warfare"
+        }
+      },
+      "secondary": {
+        "type": "store",
+        "target": "/store/corporate-warfare",
+        "label": "Store page"
+      },
+      "starts": "2026-11-13T00:00:00Z",
+      "ends": "2027-03-01T00:00:00Z",
+      "priority": 20
+    },
+    {
+      "id": "mov-2-0-elections",
+      "kind": "release",
+      "game": "mov",
+      "badge": "2.0",
+      "kicker": "Out now",
+      "headline": "121 elections in 14 countries",
+      "line": "Run a real campaign, turn by turn. The base game is free, and every pack is included with any supporter tier.",
+      "tile": "121 elections, 14 countries",
+      "art": "bundled:mov",
+      "focus": {
+        "x": 64,
+        "y": 50
+      },
+      "action": {
+        "type": "play",
+        "target": "mov",
+        "label": "Play free",
+        "fallback": {
+          "type": "store",
+          "target": "/store/margin-of-victory",
+          "label": "Open store page"
+        }
+      },
+      "secondary": {
+        "type": "store",
+        "target": "/store/margin-of-victory",
+        "label": "Store page"
+      },
+      "starts": "2026-11-13T00:00:00Z",
+      "ends": "2027-03-01T00:00:00Z",
       "priority": 30
     },
     {
       "id": "gc-early-access",
       "kind": "news",
       "game": "gc",
-      "headline": "Grand Century is in early access",
-      "line": "Play it in the browser now. The desktop version is in progress.",
-      "art": "https://lakesidegames.net/store/assets/gc-world.webp",
-      "action": { "type": "play", "target": "gc" },
+      "kicker": "Early access",
+      "headline": "Free in your browser",
+      "line": "Take a nation from 1700 to 1945. The desktop app is in progress.",
+      "tile": "Early access, free in your browser",
+      "art": "bundled:gc",
+      "focus": {
+        "x": 64,
+        "y": 50
+      },
+      "action": {
+        "type": "play",
+        "target": "gc",
+        "label": "Play free",
+        "fallback": {
+          "type": "store",
+          "target": "/store/grand-century",
+          "label": "Open store page"
+        }
+      },
       "starts": "2026-11-13T00:00:00Z",
-      "ends": "2026-12-13T00:00:00Z",
+      "ends": "2027-03-01T00:00:00Z",
+      "priority": 40
+    },
+    {
+      "id": "studio-state-of-the-game",
+      "kind": "news",
+      "game": "studio",
+      "kicker": "Studio news",
+      "headline": "State of the game, November 2026",
+      "line": "Where each of our games stands, from the studio.",
+      "tile": "State of the game, November 2026",
+      "art": "bundled:alpha",
+      "focus": {
+        "x": 72,
+        "y": 50
+      },
+      "action": {
+        "type": "news",
+        "target": "/news/state-of-the-game-november-2026/",
+        "label": "Read the post"
+      },
+      "starts": "2026-11-13T00:00:00Z",
+      "ends": "2027-03-01T00:00:00Z",
       "priority": 50
+    }
+  ],
+  "events": [
+    {
+      "id": "ahd-120-countdown",
+      "kind": "countdown",
+      "accent": "ahd",
+      "kicker": "Opens Sunday",
+      "headline": "A House Divided 1.20: the 2027 world",
+      "line": "Sunday, November 15 at 5:00 PM Eastern. United States and Canada.",
+      "art": "bundled:ahd",
+      "focus": {
+        "x": 58,
+        "y": 45
+      },
+      "action": {
+        "type": "install",
+        "target": "ahd",
+        "label": "Install",
+        "fallback": {
+          "type": "store",
+          "target": "/store/a-house-divided",
+          "label": "Open store page"
+        }
+      },
+      "startsAt": "2026-11-13T00:00:00Z",
+      "endsAt": "2026-11-15T22:00:00Z",
+      "target": "2026-11-15T22:00:00Z"
+    },
+    {
+      "id": "free-weekend",
+      "kind": "free",
+      "accent": "studio",
+      "kicker": "Free this weekend",
+      "headline": "Our games are leaving alpha",
+      "line": "Everything is free until Monday at 5:00 PM Eastern.",
+      "art": "bundled:alpha",
+      "focus": {
+        "x": 72,
+        "y": 50
+      },
+      "action": {
+        "type": "play",
+        "target": "cw",
+        "label": "Play free",
+        "fallback": {
+          "type": "store",
+          "target": "/store/corporate-warfare",
+          "label": "Open store page"
+        }
+      },
+      "secondary": {
+        "type": "news",
+        "target": "/news/state-of-the-game-november-2026/",
+        "label": "Open the post"
+      },
+      "startsAt": "2026-11-13T00:00:00Z",
+      "endsAt": "2026-11-16T22:00:00Z"
     }
   ]
 }
