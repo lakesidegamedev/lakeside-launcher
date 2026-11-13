@@ -70,6 +70,7 @@ pub fn inno_args(install_dir: &Path) -> Result<Vec<String>, String> {
 pub fn inno_app_id(product_id: &str) -> Option<&'static str> {
     match product_id {
         "corporate-warfare" => Some("{7C1E9A52-4D3B-4F6A-8E21-3A9D5B0C6F47}"),
+        "urban-sprawl" => Some("{B3D7A1E4-5C28-4F0B-9A6E-7D41C2E8F935}"),
         _ => None,
     }
 }
@@ -82,14 +83,23 @@ pub fn inno_app_id(product_id: &str) -> Option<&'static str> {
 pub fn registry_display_names(product_id: &str) -> &'static [&'static str] {
     match product_id {
         "grand-century-desktop" => &["Grand Century", "GrandCentury"],
+        // Inno writes "Urban Sprawl <version>"; see display_name_is_prefix.
+        "urban-sprawl" => &["Urban Sprawl"],
         _ => &[],
     }
+}
+
+/// Products whose uninstall `DisplayName` carries a version after the name, so
+/// the match is "starts with" instead of "equals".
+pub fn display_name_is_prefix(product_id: &str) -> bool {
+    product_id == "urban-sprawl"
 }
 
 /// Program file name inside the install folder, for registry-found products.
 #[allow(dead_code)]
 pub fn registry_executable_name(product_id: &str) -> Option<&'static str> {
     match product_id {
+        "urban-sprawl" => Some("urban-sprawl.exe"),
         "grand-century-desktop" => Some("grandcentury-desktop.exe"),
         _ => None,
     }
@@ -105,10 +115,16 @@ pub fn display_name_matches(product_id: &str, display: &str) -> bool {
             .to_lowercase()
     };
     let wanted = squash(display);
+    let prefix = display_name_is_prefix(product_id);
     !wanted.is_empty()
-        && registry_display_names(product_id)
-            .iter()
-            .any(|name| squash(name) == wanted)
+        && registry_display_names(product_id).iter().any(|name| {
+            let name = squash(name);
+            if prefix {
+                wanted.starts_with(&name)
+            } else {
+                name == wanted
+            }
+        })
 }
 
 pub fn inno_uninstall_subkey(app_id: &str) -> String {
@@ -122,6 +138,7 @@ pub fn inno_uninstall_subkey(app_id: &str) -> String {
 pub fn windows_inno_dir(root: &Path, product_id: &str) -> Option<PathBuf> {
     match product_id {
         "corporate-warfare" => Some(root.join("Programs").join("Corporate Warfare")),
+        "urban-sprawl" => Some(root.join("Programs").join("Urban Sprawl")),
         _ => None,
     }
 }
@@ -130,6 +147,7 @@ pub fn windows_inno_dir(root: &Path, product_id: &str) -> Option<PathBuf> {
 pub fn windows_inno_executable(product_id: &str) -> Option<&'static str> {
     match product_id {
         "corporate-warfare" => Some("Programs/Corporate Warfare/Corporate Warfare.exe"),
+        "urban-sprawl" => Some("Programs/Urban Sprawl/urban-sprawl.exe"),
         _ => None,
     }
 }
@@ -139,6 +157,7 @@ pub fn windows_inno_executable(product_id: &str) -> Option<&'static str> {
 pub fn linux_appimage_relative(product_id: &str) -> Option<&'static str> {
     match product_id {
         "corporate-warfare" => Some("CorporateWarfare/CorporateWarfare.AppImage"),
+        "urban-sprawl" => Some("UrbanSprawl/UrbanSprawl.AppImage"),
         "grand-century-desktop" => Some("GrandCentury/GrandCentury.AppImage"),
         _ => None,
     }
@@ -464,6 +483,28 @@ mod tests {
         );
         assert!(inno_args(Path::new("C:\\a\"b")).is_err());
         assert!(inno_args(Path::new("")).is_err());
+    }
+
+    #[test]
+    fn urban_sprawl_is_wired_like_corporate_warfare() {
+        let id = inno_app_id("urban-sprawl").expect("id");
+        assert_eq!(id, "{B3D7A1E4-5C28-4F0B-9A6E-7D41C2E8F935}");
+        assert_eq!(
+            inno_uninstall_subkey(id),
+            r"Software\Microsoft\Windows\CurrentVersion\Uninstall\{B3D7A1E4-5C28-4F0B-9A6E-7D41C2E8F935}_is1"
+        );
+        let root = Path::new("/r");
+        assert_eq!(windows_inno_dir(root, "urban-sprawl"), Some(root.join("Programs").join("Urban Sprawl")));
+        assert_eq!(windows_inno_executable("urban-sprawl"), Some("Programs/Urban Sprawl/urban-sprawl.exe"));
+        assert_eq!(
+            linux_appimage_path(root, "urban-sprawl"),
+            Some(root.join("UrbanSprawl/UrbanSprawl.AppImage"))
+        );
+        assert_eq!(registry_executable_name("urban-sprawl"), Some("urban-sprawl.exe"));
+        assert!(display_name_matches("urban-sprawl", "Urban Sprawl 0.1.0"));
+        assert!(display_name_matches("urban-sprawl", "urban sprawl"));
+        assert!(!display_name_matches("urban-sprawl", "Not Urban Sprawl"));
+        assert!(!display_name_matches("grand-century-desktop", "Grand Century 9"));
     }
 
     #[test]

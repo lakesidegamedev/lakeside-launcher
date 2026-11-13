@@ -63,6 +63,12 @@ export interface Product {
   companionOf?: string;
   /** Library row that owns this companion's desktop app, in the other direction. */
   companion?: string;
+  /**
+   * Staff-only preview: the product exists in the launcher only for an account
+   * that really holds its entitlement. It is never opened by free access, never
+   * shown signed out, and has no Buy action anywhere.
+   */
+  staffOnly?: boolean;
   accent: string;
   mark: string;
   art: string | null;
@@ -154,6 +160,33 @@ export const CATALOG: readonly Product[] = [
     installSizeMb: 84,
   },
   {
+    id: "urban-sprawl",
+    game: "urban-sprawl",
+    title: "Urban Sprawl",
+    blurb: "Internal preview",
+    delivery: "native",
+    platforms: ["windows", "linux", "macos"],
+    entitlementIds: ["urban-sprawl"],
+    liveId: null,
+    webUrl: null,
+    executables: {
+      windows: "Programs/Urban Sprawl/urban-sprawl.exe",
+      linux: "UrbanSprawl/UrbanSprawl.AppImage",
+    },
+    authenticatedDownload: true,
+    handoffClientId: "urban-sprawl-desktop",
+    staffOnly: true,
+    // Never sold: the store page is the account page and no Buy action is built for it.
+    storeUrl: "https://lakesidegames.net/account",
+    browserDownloadUrl: "https://lakesidegames.net/account",
+    accent: "#c98a5a",
+    mark: "US",
+    // No key art yet: the monogram tile is the placeholder. Drop real art in
+    // src/assets/media and point this at it.
+    art: null,
+    installSizeMb: null,
+  },
+  {
     id: "grand-century",
     game: "grand-century",
     title: "Grand Century",
@@ -204,6 +237,15 @@ export const CATALOG: readonly Product[] = [
 export const PRODUCTS_BY_ID: ReadonlyMap<string, Product> = new Map(
   CATALOG.map((product) => [product.id, product]),
 );
+
+/**
+ * Products this account may see at all. A staff-only preview needs its
+ * entitlement from the platform itself, so pass the account's real purchases,
+ * never the free-access merge.
+ */
+export function visibleProducts(realEntitlements: Entitlements): readonly Product[] {
+  return CATALOG.filter((product) => !product.staffOnly || ownsProduct(product, realEntitlements));
+}
 
 export type EntitlementState = "owned" | "refunded";
 export type Entitlements = Readonly<Record<string, EntitlementState>>;

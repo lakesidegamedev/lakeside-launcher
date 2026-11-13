@@ -215,6 +215,10 @@ async function main() {
     if (await launcherPage.locator("table.lib tr").filter({ hasText: "Corporate Warfare" }).count()) {
       throw new Error("Corporate Warfare is in the library of an account without it");
     }
+    // The staff-only preview must leave no trace for an account without its grant.
+    if (/Urban Sprawl/i.test((await launcherPage.locator("body").innerText()) ?? "")) {
+      throw new Error("a staff-only preview shows up for an account without it");
+    }
   });
 }
 

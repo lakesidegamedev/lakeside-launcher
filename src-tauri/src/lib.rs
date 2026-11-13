@@ -192,6 +192,13 @@ pub fn windows_inno_installed_version(product_id: &str) -> Option<String> {
             }
         }
     }
+    // Fallback for products that also register a display name (Urban Sprawl):
+    // an install whose key is not the AppId key is still found by its name.
+    if !installer::registry_display_names(product_id).is_empty() {
+        return find_registered_install(product_id)
+            .map(|found| found.version)
+            .filter(|version| !version.is_empty());
+    }
     None
 }
 
@@ -1350,7 +1357,7 @@ fn installed_products(app: AppHandle) -> HashMap<String, InstalledProduct> {
 
     #[cfg(target_os = "windows")]
     {
-        for product_id in ["ahd", "corporate-warfare", "grand-century-desktop"] {
+        for product_id in ["ahd", "corporate-warfare", "urban-sprawl", "grand-century-desktop"] {
             let Some(executable) = installed_executable(product_id) else {
                 continue;
             };

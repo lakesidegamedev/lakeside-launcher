@@ -22,7 +22,7 @@ describe("free access", () => {
     expect(freeGrantedIds(FREE_ACCESS_OFF, {}, CATALOG, now).size).toBe(0);
   });
   it("opens paid games, not owned ones twice", () => {
-    const paid = CATALOG.filter((product) => product.entitlementIds.length > 0);
+    const paid = CATALOG.filter((product) => product.entitlementIds.length > 0 && !product.staffOnly);
     expect(paid.length).toBeGreaterThan(0);
     expect(freeGrantedIds(live, {}, CATALOG, now).size).toBe(paid.length);
     const first = paid[0]!;
@@ -30,5 +30,9 @@ describe("free access", () => {
     expect(freeGrantedIds(live, owned, CATALOG, now).has(first.id)).toBe(false);
     const merged = withFreeAccess(live, {}, CATALOG, now);
     for (const product of paid) expect(merged[product.entitlementIds[0]!]).toBe("owned");
+  });
+  it("never opens a staff-only preview", () => {
+    expect(freeGrantedIds(live, {}, CATALOG, now).has("urban-sprawl")).toBe(false);
+    expect(withFreeAccess(live, {}, CATALOG, now)["urban-sprawl"]).toBeUndefined();
   });
 });
