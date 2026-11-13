@@ -145,7 +145,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xvfb libfuse2t64 xdg-utils || sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xvfb libfuse2 xdg-utils
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xvfb libfuse2t64 xdg-utils mesa-vulkan-drivers || sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xvfb libfuse2 xdg-utils mesa-vulkan-drivers
           cd e2e && npm init -y >/dev/null && npm install playwright-core --no-audit --no-fund
 
       - name: Sign in as the second test account (bearer for the install code)
