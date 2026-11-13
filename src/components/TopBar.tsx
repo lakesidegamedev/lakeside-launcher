@@ -1,6 +1,6 @@
 import markUrl from "../assets/lakeside-mark.svg";
 
-export type View = "library" | "store" | "downloads" | "account";
+export type View = "home" | "library" | "store" | "downloads" | "account";
 
 interface Props {
   view: View;
@@ -12,6 +12,7 @@ interface Props {
 }
 
 const TABS: ReadonlyArray<{ id: Exclude<View, "account">; label: string }> = [
+  { id: "home", label: "Home" },
   { id: "library", label: "Library" },
   { id: "store", label: "Store" },
   { id: "downloads", label: "Downloads" },

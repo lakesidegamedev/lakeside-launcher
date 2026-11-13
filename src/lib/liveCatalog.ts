@@ -22,12 +22,16 @@ export interface LiveTier {
   interval: string;
   currency: string;
   grants: readonly string[];
+  /** What the tier gives, in the studio's words. Shown as is when the catalog sends it. */
+  description?: string;
 }
 
 export interface LiveCatalog {
   products: readonly LiveProduct[];
   subscriptions: readonly LiveTier[];
   subscriptionsAvailable: boolean;
+  /** One line shown under the tiers when the catalog sends it. */
+  tiersNote?: string;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -67,6 +71,9 @@ export function parseLiveCatalog(raw: unknown): LiveCatalog | null {
         grants: Array.isArray(entry.grants)
           ? entry.grants.filter((grant): grant is string => typeof grant === "string")
           : [],
+        ...(typeof entry.description === "string" && entry.description.trim()
+          ? { description: entry.description.trim() }
+          : {}),
       });
     }
   }
@@ -74,6 +81,9 @@ export function parseLiveCatalog(raw: unknown): LiveCatalog | null {
     products,
     subscriptions,
     subscriptionsAvailable: raw.subscriptionsAvailable !== false,
+    ...(typeof raw.tiersNote === "string" && raw.tiersNote.trim()
+      ? { tiersNote: raw.tiersNote.trim() }
+      : {}),
   };
 }
 
@@ -106,6 +116,32 @@ export function grantName(id: string, catalog: LiveCatalog): string {
 
 export function tierPrice(tier: LiveTier): string {
   return `${formatPrice(tier.priceCents, tier.currency)} / ${tier.interval}`;
+}
+
+/** What a tier includes: the catalog's own wording, else its grants by name. Never derived from the tier name. */
+export function tierDescription(tier: LiveTier, catalog: LiveCatalog): string {
+  if (tier.description) return tier.description;
+  return tier.grants.length > 0
+    ? `Includes ${tier.grants.map((grant) => grantName(grant, catalog)).join(", ")}`
+    : "";
+}
+
+/** The tiers whose catalog grants include a product. Empty when none do. */
+export function tiersIncluding(catalog: LiveCatalog, productId: string | null): readonly LiveTier[] {
+  if (!productId) return [];
+  return catalog.subscriptions.filter((tier) => tier.grants.includes(productId));
+}
+
+/** "$3 a month" for whole dollars, "$9.99 a month" otherwise. */
+export function tierPriceWords(tier: LiveTier): string {
+  const whole = tier.priceCents % 100 === 0 && tier.currency.toLowerCase() === "usd";
+  const text = whole ? `$${tier.priceCents / 100}` : formatPrice(tier.priceCents, tier.currency);
+  return `${text} a ${tier.interval}`;
+}
+
+/** One sentence per tier, as the studio words it: "Supporter, $3 a month: ...". */
+export function tierSentence(tier: LiveTier, catalog: LiveCatalog): string {
+  return `${tier.name}, ${tierPriceWords(tier)}: ${tierDescription(tier, catalog)}`;
 }
 
 export function findLive(catalog: LiveCatalog, id: string | null): LiveProduct | null {

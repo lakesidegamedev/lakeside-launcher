@@ -59,7 +59,7 @@ export function SignInView({ freeGames, onSignIn, onGuest }: Props): JSX.Element
           </tbody>
         </table>
         <div className="muted small" style={{ marginTop: 9 }}>
-          Signing in adds your purchases, Supporter games and one login across every device.
+          Signing in adds your purchases and one login across every device.
         </div>
       </div>
     </section>

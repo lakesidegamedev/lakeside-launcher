@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { etaSeconds, fractionOf, type DownloadItem } from "../lib/downloads";
 import { formatBytes, formatDay, formatEta, formatSpeed } from "../lib/format";
 import { PRODUCTS_BY_ID } from "../catalog";
@@ -11,6 +12,10 @@ interface Props {
   onClearFinished: () => void;
   onRetry: (id: string) => void;
   onOpenFolder: () => void;
+  /** Current install folder, or null when this shell cannot say. */
+  installRoot: string | null;
+  /** Ask the shell to use a new install folder (null for the default). Resolves to the folder in use. */
+  onSetInstallRoot: (path: string | null) => Promise<string>;
 }
 
 function ItemCell({ item }: { item: DownloadItem }): JSX.Element {
@@ -21,7 +26,7 @@ function ItemCell({ item }: { item: DownloadItem }): JSX.Element {
       <span>
         <b>{item.title}</b>
         <small>
-          {item.kind === "update" ? "Update" : "Install"} {item.version}
+          {item.kind === "update" ? "Update" : item.kind === "reinstall" ? "Reinstall" : "Install"} {item.version}
         </small>
       </span>
     </div>
@@ -35,7 +40,21 @@ export function DownloadsView({
   onClearFinished,
   onRetry,
   onOpenFolder,
+  installRoot,
+  onSetInstallRoot,
 }: Props): JSX.Element {
+  const [draft, setDraft] = useState("");
+  const [rootMessage, setRootMessage] = useState<string | null>(null);
+  const canChangeRoot = capabilities.has("set_install_root");
+  async function applyRoot(next: string | null): Promise<void> {
+    try {
+      const used = await onSetInstallRoot(next);
+      setRootMessage(`New installs go to ${used}.`);
+      setDraft("");
+    } catch (error) {
+      setRootMessage(error instanceof Error ? error.message : String(error));
+    }
+  }
   const active = items.filter((item) => item.status === "running" || item.status === "queued");
   const finished = items.filter((item) => item.status === "done" || item.status === "failed");
   const running = active.filter((item) => item.status === "running").length;
@@ -142,9 +161,34 @@ export function DownloadsView({
         <div className="panel">
           <h3>Where files go</h3>
           <div className="sub" style={{ marginBottom: 9 }}>
-            The launcher puts each game in its own folder under your user profile. Downloads are checked
-            against the published build as they finish.
+            Each game gets its own folder here. Downloads are checked against the published build as they
+            finish.
           </div>
+          {installRoot ? <div className="path" style={{ marginBottom: 9 }}>{installRoot}</div> : null}
+          {canChangeRoot ? (
+            <div className="btnrow" style={{ marginBottom: 9 }}>
+              <input
+                type="text"
+                value={draft}
+                placeholder="New install folder (full path)"
+                aria-label="New install folder"
+                onChange={(event) => setDraft(event.target.value)}
+                style={{ flex: 1, minWidth: 0 }}
+              />
+              <button
+                type="button"
+                className="btn sm"
+                disabled={draft.trim().length === 0}
+                onClick={() => void applyRoot(draft.trim())}
+              >
+                Use this folder
+              </button>
+              <button type="button" className="btn sm" onClick={() => void applyRoot(null)}>
+                Default
+              </button>
+            </div>
+          ) : null}
+          {rootMessage ? <div className="sub" style={{ marginBottom: 9 }}>{rootMessage}</div> : null}
           <div className="btnrow">
             <button
               type="button"

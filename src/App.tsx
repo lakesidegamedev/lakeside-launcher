@@ -30,7 +30,8 @@ import {
   openExternal,
   openInstallFolder,
   openWebGame,
-  repairInstall,
+  getInstallRoot as getInstallRootSetting,
+  setInstallRoot as setInstallRootSetting,
   uninstallProduct,
   type Capability,
   type InstallDetails,
@@ -62,6 +63,10 @@ import { DownloadsView } from "./components/DownloadsView";
 import { AccountView } from "./components/AccountView";
 import { SignInView } from "./components/SignInView";
 import { StatusBar } from "./components/StatusBar";
+import { HomeView } from "./components/HomeView";
+import type { HomeFeed, SlideAction } from "./components/home/slides";
+import { loadFreeAccess, loadHomeFeed } from "./lib/homeFeed";
+import { SLIDE_GAME_TO_ROW, continuePlaying, playerState, recentlyUpdated } from "./lib/home";
 
 const GUEST_KEY = "lakeside.launcher.guest";
 const ACCOUNT_URL = "https://lakesidegames.net/account";
@@ -86,7 +91,7 @@ export function App(): JSX.Element {
 
   const [session, setSession] = useState<Session | null>(null);
   const [entitlements, setEntitlements] = useState<Entitlements>({});
-  const [view, setView] = useState<View>("library");
+  const [view, setView] = useState<View>("home");
   const [gameId, setGameId] = useState<string | null>(null);
   const [guest, setGuest] = useState(() => {
     try {
@@ -115,6 +120,9 @@ export function App(): JSX.Element {
   const [capabilities, setCapabilities] = useState<ReadonlySet<Capability>>(new Set());
   const [notes, setNotes] = useState<Record<string, PatchNote[]>>(demo ? DEMO_NOTES : {});
   const [details, setDetails] = useState<Record<string, InstallDetails>>({});
+  const [installRoot, setInstallRoot] = useState<string | null>(null);
+  const [homeFeed, setHomeFeed] = useState<HomeFeed | null>(null);
+  const [freeAccess, setFreeAccess] = useState(false);
 
   // Session and purchases.
   useEffect(() => {
@@ -139,6 +147,20 @@ export function App(): JSX.Element {
     let cancelled = false;
     void loadCatalog().then((result) => {
       if (!cancelled) setCatalogResult(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Home slides and the free-access switch.
+  useEffect(() => {
+    let cancelled = false;
+    void loadHomeFeed().then((result) => {
+      if (!cancelled) setHomeFeed(result.feed);
+    });
+    void loadFreeAccess().then((on) => {
+      if (!cancelled) setFreeAccess(on);
     });
     return () => {
       cancelled = true;
@@ -288,6 +310,21 @@ export function App(): JSX.Element {
     };
   }, []);
 
+  useEffect(() => {
+    if (!capabilities.has("set_install_root")) return;
+    let cancelled = false;
+    void getInstallRootSetting()
+      .then((root) => {
+        if (!cancelled) setInstallRoot(root);
+      })
+      .catch(() => {
+        // The folder just is not shown.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [capabilities]);
+
   // Details about each installed game, when this build of the shell can report them.
   useEffect(() => {
     if (!capabilities.has("install_details")) return;
@@ -325,6 +362,32 @@ export function App(): JSX.Element {
       cancelled = true;
     };
   }, [selectedDesktopId, notesUrl, notes]);
+
+  // Release notes for the Home "Recently updated" list: the newest few per game.
+  const homeNoteTargets = Object.entries(releases)
+    .filter(([, release]) => !!release.notesUrl)
+    .map(([id, release]) => `${id}|${release.notesUrl}`)
+    .sort()
+    .join(",");
+  useEffect(() => {
+    if (view !== "home" || !isDesktop() || !homeNoteTargets) return;
+    let cancelled = false;
+    for (const target of homeNoteTargets.split(",")) {
+      const [id, url] = target.split("|");
+      if (!id || !url || notes[id]) continue;
+      void getPatchNotes(url, 3)
+        .then((list) => {
+          if (!cancelled) setNotes((previous) => (previous[id] ? previous : { ...previous, [id]: list }));
+        })
+        .catch(() => {
+          // A game without public notes simply has no row.
+        });
+    }
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, homeNoteTargets]);
 
   const catalog = catalogResult?.catalog ?? null;
   const libraryIds = new Set(libraryProducts(entitlements).map((product) => product.id));
@@ -459,7 +522,7 @@ export function App(): JSX.Element {
       setNotice("No verified installer is published for this platform yet.");
       return;
     }
-    const kind = installed[product.id] ? "update" : "install";
+    const kind = installed[product.id] ? (hasUpdate(product) ? "update" : "reinstall") : "install";
     setDownloads((previous) => {
       if (activeDownloads(previous).some((item) => item.id === product.id)) return previous;
       const rest = previous.filter((item) => item.id !== product.id);
@@ -742,6 +805,22 @@ export function App(): JSX.Element {
   }
 
   const allRows = CATALOG.filter((product) => !product.companionOf).map(rowFor);
+  const artForSlide = useCallback((game: string): string => {
+    const rowId = SLIDE_GAME_TO_ROW[game];
+    return (rowId ? PRODUCTS_BY_ID.get(rowId)?.art : null) ?? "";
+  }, []);
+
+  function runSlideAction(action: SlideAction): void {
+    if (action.type === "store" || action.type === "news") {
+      openUrl(`https://lakesidegames.net${action.target}`);
+      return;
+    }
+    const rowId = SLIDE_GAME_TO_ROW[action.target];
+    const row = rowId ? allRows.find((entry) => entry.product.id === rowId) : undefined;
+    if (!row) return;
+    // The row decides what Install, Update or Play means for this machine.
+    runAction(row);
+  }
   const rows = allRows.filter((row) => libraryIds.has(row.product.id));
   const selectedRow = gameId ? (allRows.find((row) => row.product.id === gameId) ?? null) : null;
   const running = activeDownloads(downloads);
@@ -808,6 +887,25 @@ export function App(): JSX.Element {
             onSignIn={(provider) => void handleSignIn(provider)}
             onGuest={continueAsGuest}
           />
+        ) : view === "home" ? (
+          <HomeView
+            feed={homeFeed}
+            freeAccess={freeAccess}
+            player={playerState(rows)}
+            artFor={artForSlide}
+            onSlideAction={runSlideAction}
+            continueList={continuePlaying(rows, installed, details)}
+            recent={recentlyUpdated(
+              notes,
+              Object.fromEntries(CATALOG.map((product) => [product.id, product.companionOf ? (PRODUCTS_BY_ID.get(product.companionOf)?.title ?? product.title) : product.title])),
+            )}
+            onPlay={runAction}
+            onOpenGame={(id) => {
+              setView("library");
+              setGameId(PRODUCTS_BY_ID.get(id)?.companionOf ?? id);
+            }}
+            onLibrary={() => setView("library")}
+          />
         ) : view === "library" && selectedRow ? (
           <GameView
             row={selectedRow}
@@ -828,11 +926,10 @@ export function App(): JSX.Element {
                 ? void runBackend("Open folder", () => openInstallFolder(selectedRow.desktop!.id))
                 : undefined
             }
-            onRepair={() =>
-              selectedRow.desktop
-                ? void runBackend("Repair", () => repairInstall(selectedRow.desktop!.id))
-                : undefined
+            canReinstall={
+              !!selectedRow.desktop && canInstall(selectedRow.desktop) && !macBrowserDownload(selectedRow.desktop)
             }
+            onReinstall={() => (selectedRow.desktop ? void handleInstall(selectedRow.desktop) : undefined)}
             onUninstall={() => {
               const desktop = selectedRow.desktop;
               if (!desktop) return;
@@ -890,8 +987,13 @@ export function App(): JSX.Element {
               if (product) enqueueInstall(product);
             }}
             onOpenFolder={() => {
-              const first = Object.keys(installed)[0];
-              if (first) void runBackend("Open folder", () => openInstallFolder(first));
+              void runBackend("Open folder", () => openInstallFolder(null));
+            }}
+            installRoot={installRoot}
+            onSetInstallRoot={async (path) => {
+              const used = await setInstallRootSetting(path);
+              setInstallRoot(used);
+              return used;
             }}
           />
         ) : (

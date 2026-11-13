@@ -8,7 +8,10 @@ import {
   ownedLabel,
   parseLiveCatalog,
   priceSummary,
+  tierDescription,
   tierPrice,
+  tierSentence,
+  tiersIncluding,
 } from "./liveCatalog";
 
 function product(id: string): Product {
@@ -106,5 +109,33 @@ describe("merging the live catalog with delivery metadata", () => {
     expect(ownedLabel(product("grand-century"), {})).toBe("free");
     expect(ownedLabel(product("corporate-warfare"), {})).toBe("buy");
     expect(ownedLabel(product("corporate-warfare"), { "corporate-warfare": "owned" })).toBe("owned");
+  });
+
+  it("words the bundled tiers exactly as the studio settled them", () => {
+    const text = [
+      ...live.subscriptions.map((tier) => tierSentence(tier, live)),
+      live.tiersNote ?? "",
+    ].join(" ");
+    expect(text).toBe(
+      "Supporter, $3 a month: support the studio, browse A House Divided ad-free, unlock supporter cosmetics and supporter chat, put your name on the supporter wall, and get the Margin of Victory Complete Collection. " +
+        "Supporter+, $9.99 a month: everything in Supporter plus all paid access to every Lakeside game: Corporate Warfare, A House Divided single-player and sandbox, every Margin of Victory pack, and anything we add later. " +
+        "Champion, $20 a month: the same access as Supporter+, the biggest way to back the studio, with its own place on the supporter wall. " +
+        "Store subscriptions and Patreon tiers are the same tiers; join either way.",
+    );
+  });
+
+  it("shows the live catalog's tiers, not a fixed list, and falls back to grants without a description", () => {
+    const parsed = parseLiveCatalog({
+      products: [{ id: "corporate-warfare", name: "Corporate Warfare", priceCents: 1499 }],
+      subscriptions: [
+        { id: "x", name: "Patron", priceCents: 500, interval: "month", grants: ["corporate-warfare"] },
+        { id: "y", name: "Elder", priceCents: 1000, grants: [], description: "a custom line" },
+      ],
+    });
+    expect(parsed?.subscriptions.map((tier) => tier.name)).toEqual(["Patron", "Elder"]);
+    const [patron, elder] = parsed?.subscriptions ?? [];
+    expect(patron && parsed && tierDescription(patron, parsed)).toBe("Includes Corporate Warfare");
+    expect(elder && parsed && tierDescription(elder, parsed)).toBe("a custom line");
+    expect(parsed && tiersIncluding(parsed, "corporate-warfare").map((tier) => tier.name)).toEqual(["Patron"]);
   });
 });

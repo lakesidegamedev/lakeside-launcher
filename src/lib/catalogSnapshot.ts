@@ -129,7 +129,7 @@ export const CATALOG_SNAPSHOT: LiveCatalog = {
       "id": "corporate-warfare",
       "game": "corporate-warfare",
       "name": "Corporate Warfare",
-      "description": "The corporate strategy game. One purchase, yours to keep; also included with any supporter tier.",
+      "description": "The corporate strategy game. One purchase, yours to keep.",
       "priceCents": 1499,
       "currency": "usd"
     },
@@ -137,7 +137,7 @@ export const CATALOG_SNAPSHOT: LiveCatalog = {
       "id": "ahd-singleplayer",
       "game": "a-house-divided",
       "name": "A House Divided: Single-player",
-      "description": "The single-player edition of A House Divided. One purchase, yours to keep; also included with any supporter tier.",
+      "description": "The single-player edition of A House Divided. One purchase, yours to keep.",
       "priceCents": 1499,
       "currency": "usd"
     }
@@ -149,10 +149,8 @@ export const CATALOG_SNAPSHOT: LiveCatalog = {
       "priceCents": 300,
       "interval": "month",
       "currency": "usd",
-      "grants": [
-        "corporate-warfare",
-        "ahd-singleplayer"
-      ]
+      "grants": ["complete"],
+      "description": "support the studio, browse A House Divided ad-free, unlock supporter cosmetics and supporter chat, put your name on the supporter wall, and get the Margin of Victory Complete Collection."
     },
     {
       "id": "supporter-plus",
@@ -160,13 +158,19 @@ export const CATALOG_SNAPSHOT: LiveCatalog = {
       "priceCents": 999,
       "interval": "month",
       "currency": "usd",
-      "grants": [
-        "corporate-warfare",
-        "ahd-singleplayer",
-        "sandbox",
-        "complete"
-      ]
+      "grants": ["corporate-warfare", "ahd-singleplayer", "sandbox", "complete"],
+      "description": "everything in Supporter plus all paid access to every Lakeside game: Corporate Warfare, A House Divided single-player and sandbox, every Margin of Victory pack, and anything we add later."
+    },
+    {
+      "id": "champion",
+      "name": "Champion",
+      "priceCents": 2000,
+      "interval": "month",
+      "currency": "usd",
+      "grants": ["corporate-warfare", "ahd-singleplayer", "sandbox", "complete"],
+      "description": "the same access as Supporter+, the biggest way to back the studio, with its own place on the supporter wall."
     }
   ],
-  "subscriptionsAvailable": true
+  "subscriptionsAvailable": true,
+  "tiersNote": "Store subscriptions and Patreon tiers are the same tiers; join either way."
 };

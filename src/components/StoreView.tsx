@@ -3,9 +3,10 @@ import {
   addOnRows,
   addonsFor,
   findLive,
-  grantName,
+  tierDescription,
   ownedLabel,
   priceSummary,
+  tiersIncluding,
   tierPrice,
   type LiveCatalog,
 } from "../lib/liveCatalog";
@@ -178,7 +179,14 @@ export function StoreView({
                       <b>{edition.name}</b>
                     </td>
                     <td>{product.title}</td>
-                    <td className="wrap">Yours to keep, or included with a supporter tier</td>
+                    <td className="wrap">
+                      {(() => {
+                        const included = tiersIncluding(catalog, product.liveId).map((tier) => tier.name);
+                        return included.length > 0
+                          ? `Yours to keep, or included with ${included.join(", ")}`
+                          : "Yours to keep";
+                      })()}
+                    </td>
                     <td className="r">
                       <b>{formatPrice(edition.priceCents, edition.currency)}</b>
                     </td>
@@ -206,25 +214,25 @@ export function StoreView({
             <thead>
               <tr>
                 <th>Tier</th>
-                <th>Includes while subscribed</th>
+                <th>What it gives</th>
                 <th className="r">Price</th>
                 <th />
               </tr>
             </thead>
             <tbody>
-              {catalog.subscriptions.map((tier, index) => (
+              {catalog.subscriptions.map((tier) => (
                 <tr key={tier.id}>
                   <td>
                     <b>{tier.name}</b>
                   </td>
                   <td className="wrap">
-                    {tier.grants.map((grant) => grantName(grant, catalog)).join(", ")}
+                    {tierDescription(tier, catalog)}
                   </td>
                   <td className="r">{tierPrice(tier)}</td>
                   <td className="r">
                     <button
                       type="button"
-                      className={index === catalog.subscriptions.length - 1 ? "btn sm p" : "btn sm"}
+                      className="btn sm"
                       onClick={() => onOpenUrl("https://lakesidegames.net/account")}
                     >
                       Subscribe
@@ -234,6 +242,7 @@ export function StoreView({
               ))}
             </tbody>
           </table>
+          {catalog.tiersNote ? <p className="muted small">{catalog.tiersNote}</p> : null}
         </>
       ) : null}
     </section>

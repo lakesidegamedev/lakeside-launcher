@@ -215,7 +215,6 @@ export async function getPatchNotes(notesUrl: string, limit = 3): Promise<PatchN
  */
 export type Capability =
   | "open_install_folder"
-  | "repair_install"
   | "uninstall_product"
   | "install_details"
   | "set_install_root"
@@ -231,12 +230,18 @@ export async function getCapabilities(): Promise<ReadonlySet<Capability>> {
   }
 }
 
-export async function openInstallFolder(productId: string): Promise<void> {
+/** Open a game's install folder, or the install root when no product is given. */
+export async function openInstallFolder(productId: string | null): Promise<void> {
   await invoke<void>("open_install_folder", { productId });
 }
 
-export async function repairInstall(productId: string): Promise<void> {
-  await invoke<void>("repair_install", { productId });
+export async function getInstallRoot(): Promise<string> {
+  return invoke<string>("get_install_root");
+}
+
+/** Use a new install folder for new installs, or the default when null. Resolves to the folder in use. */
+export async function setInstallRoot(path: string | null): Promise<string> {
+  return invoke<string>("set_install_root", { path });
 }
 
 export async function uninstallProduct(productId: string): Promise<void> {
@@ -252,4 +257,19 @@ export interface InstallDetails {
 
 export async function installDetails(productId: string): Promise<InstallDetails> {
   return invoke<InstallDetails>("install_details", { productId });
+}
+
+/** The home feed, validated by the shell (https, studio hosts, schema). Browser previews skip it. */
+export async function fetchHomeFeed(): Promise<import("../components/home/slides").HomeFeed | null> {
+  if (!isDesktop()) return null;
+  return invoke<import("../components/home/slides").HomeFeed>("fetch_home_feed");
+}
+
+/** Whether the studio free-access switch is on (the public switch the entitlements read). */
+export async function fetchFreeAccess(): Promise<boolean> {
+  if (isDesktop()) return invoke<boolean>("free_access_status");
+  const response = await fetch("https://lakesidegames.net/account/api/free-access");
+  if (!response.ok) return false;
+  const body = (await response.json()) as { on?: unknown };
+  return body.on === true;
 }

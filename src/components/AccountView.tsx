@@ -2,7 +2,7 @@ import { CATALOG } from "../catalog";
 import type { Entitlements } from "../catalog";
 import type { Session } from "../platform/client";
 import type { SignInProvider } from "../lib/signin";
-import { grantName, tierPrice, type LiveCatalog } from "../lib/liveCatalog";
+import { tierDescription, tierPrice, type LiveCatalog } from "../lib/liveCatalog";
 
 interface Props {
   session: Session | null;
@@ -153,11 +153,7 @@ export function AccountView({
                 <div className="sub" style={{ marginBottom: 8 }}>
                   {tierPrice(tier)}
                 </div>
-                <ul className="plain">
-                  {tier.grants.map((grant) => (
-                    <li key={grant}>{grantName(grant, catalog)}</li>
-                  ))}
-                </ul>
+                <p className="sub">{tierDescription(tier, catalog)}</p>
               </div>
             ))
           ) : null}

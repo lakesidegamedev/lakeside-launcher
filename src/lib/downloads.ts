@@ -7,7 +7,7 @@ export interface DownloadItem {
   /** Product id; one active item per product. */
   id: string;
   title: string;
-  kind: "install" | "update";
+  kind: "install" | "update" | "reinstall";
   version: string;
   status: DownloadStatus;
   downloaded: number;
@@ -22,7 +22,7 @@ export interface DownloadItem {
 export function newDownload(
   id: string,
   title: string,
-  kind: "install" | "update",
+  kind: "install" | "update" | "reinstall",
   version: string,
 ): DownloadItem {
   return {

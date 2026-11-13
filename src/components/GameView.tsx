@@ -6,7 +6,7 @@ import {
   addOnRows,
   addonsFor,
   findLive,
-  grantName,
+  tierDescription,
   tierPrice,
   type LiveCatalog,
 } from "../lib/liveCatalog";
@@ -28,7 +28,9 @@ interface Props {
   onBuy: () => void;
   onOpenUrl: (url: string) => void;
   onOpenFolder: () => void;
-  onRepair: () => void;
+  /** The published installer can be downloaded again for this game on this system. */
+  canReinstall: boolean;
+  onReinstall: () => void;
   onUninstall: () => void;
 }
 
@@ -53,7 +55,8 @@ export function GameView({
   onBuy,
   onOpenUrl,
   onOpenFolder,
-  onRepair,
+  canReinstall,
+  onReinstall,
   onUninstall,
 }: Props): JSX.Element {
   const [confirming, setConfirming] = useState(false);
@@ -76,7 +79,6 @@ export function GameView({
   const shownNotes = notes.filter((note) => note.body.trim().length > 0).slice(0, 3);
 
   const folder = capabilities.has("open_install_folder");
-  const repair = capabilities.has("repair_install");
   const uninstall = capabilities.has("uninstall_product");
 
   return (
@@ -203,7 +205,7 @@ export function GameView({
                         <b>{tier.name}</b>
                         <br />
                         <small className="muted">
-                          Includes {tier.grants.map((grant) => grantName(grant, catalog as LiveCatalog)).join(", ")}
+                          {tierDescription(tier, catalog as LiveCatalog)}
                         </small>
                       </td>
                       <td>{tierPrice(tier)}</td>
@@ -253,11 +255,11 @@ export function GameView({
                 <button
                   type="button"
                   className="btn sm"
-                  disabled={!repair}
-                  title={repair ? undefined : "Not available in this version of the launcher"}
-                  onClick={onRepair}
+                  disabled={!canReinstall}
+                  title={canReinstall ? undefined : "No verified installer is published for this system"}
+                  onClick={onReinstall}
                 >
-                  Repair
+                  Reinstall
                 </button>
                 {confirming ? (
                   <button
@@ -301,10 +303,10 @@ export function GameView({
               ) : null}
             </div>
           </div>
-          {installed && repair ? (
+          {installed && canReinstall ? (
             <div className="note" style={{ marginTop: 12 }}>
-              Repair re-checks every file against the published build and re-downloads only the ones that
-              differ. Saves are not touched.
+              Reinstall downloads the published installer again, checks it against its checksum and runs it
+              over the current install. Saves are not touched.
             </div>
           ) : null}
         </aside>
