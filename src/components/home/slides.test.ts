@@ -110,7 +110,7 @@ describe("validation", () => {
   });
   it("swaps bundled art for the launcher's own picture and drops it when there is none", () => {
     const f = { version: 1 as const, slides: [slide({ id: "b", art: "bundled" })] };
-    expect(buildSlides(f, {}, NOW, art).map((s) => s.art)).toEqual(["bundled/ahd.webp"]);
+    expect(buildSlides(f, {}, NOW, art).map((s) => s.art)).toEqual(["bundled/cw.webp"]);
     expect(buildSlides(f, {}, NOW, () => "")).toEqual([]);
   });
   it("rejects an unknown feed version", () => {
