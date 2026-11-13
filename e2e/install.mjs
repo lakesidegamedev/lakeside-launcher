@@ -269,11 +269,16 @@ async function playThrough(key, g) {
   await stage(`${key}-game-page`, 60000, () => openGamePage(g));
 
   const baselineDirs = topLevelDirs();
-  await stage(`${key}-offers-install`, 30000, async () => {
+  await stage(`${key}-offers-install`, 75000, async () => {
     if (fs.existsSync(g.installDir) && fs.readdirSync(g.installDir).some((f) => g.exeName.test(f))) {
       throw new Error(`${g.title} is already installed on this runner at ${g.installDir}`);
     }
-    const label = await primaryText();
+    // The release lookup runs first and the button reads "Checking..." meanwhile.
+    let label = await primaryText();
+    for (let i = 0; i < 30 && /^Checking/.test(label); i++) {
+      await sleep(2000);
+      label = await primaryText();
+    }
     console.log(`${g.title} primary action before install: "${label}"`);
     if (label !== "Install") throw new Error(`expected Install, the page offers "${label}"`);
     const playInBrowser = await launcherPage.getByRole("button", { name: "Play in browser" }).count();
