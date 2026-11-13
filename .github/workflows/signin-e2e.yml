@@ -71,17 +71,18 @@ jobs:
           "approach: HKCU handler override for $progId and MSEdgeHTM pointing at Edge with debugging port and shared profile"
           Start-Process -FilePath $edge -ArgumentList "--remote-debugging-port=9223", "--user-data-dir=$profileDir", "--no-first-run", "about:blank"
           for ($i = 0; $i -lt 30; $i++) {
-            try { Invoke-RestMethod http://127.0.0.1:9223/json/version | Out-Null; 'edge CDP up'; break } catch { Start-Sleep -Seconds 1 }
+            try { Invoke-RestMethod -TimeoutSec 3 http://127.0.0.1:9223/json/version | Out-Null; 'edge CDP up'; break } catch { Start-Sleep -Seconds 1 }
           }
 
       - name: Start the launcher with a debugging port
         shell: pwsh
         run: |
           $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = '--remote-debugging-port=9222'
-          Start-Process -FilePath $env:LAUNCHER_EXE
+          Start-Process -FilePath $env:LAUNCHER_EXE -RedirectStandardOutput (Join-Path $env:RUNNER_TEMP 'launcher.out') -RedirectStandardError (Join-Path $env:RUNNER_TEMP 'launcher.err')
           for ($i = 0; $i -lt 60; $i++) {
-            try { Invoke-RestMethod http://127.0.0.1:9222/json/version | Out-Null; 'launcher CDP up'; break } catch { Start-Sleep -Seconds 1 }
+            try { Invoke-RestMethod -TimeoutSec 3 http://127.0.0.1:9222/json/version | Out-Null; 'launcher CDP up'; break } catch { Start-Sleep -Seconds 1 }
           }
+          Get-Process | Where-Object { $_.Name -match 'lakeside|msedgewebview2' } | Select-Object Name, Id | Format-Table -AutoSize | Out-String
 
       - name: Sign in end to end
         shell: pwsh
