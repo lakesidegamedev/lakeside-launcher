@@ -180,6 +180,16 @@ jobs:
           export LAKESIDE_BEARER="$(cat "$RUNNER_TEMP/bearer")"
           xvfb-run -a cargo run --manifest-path src-tauri/Cargo.toml --example game_install_probe
 
+      - name: Urban Sprawl, what the AppImage prints when it will not stay up
+        if: ${{ failure() && (inputs.games == '' || contains(inputs.games, 'urban-sprawl')) }}
+        run: |
+          f="$RUNNER_TEMP/lakeside-root-us/UrbanSprawl/UrbanSprawl.AppImage"
+          ls -la "$f" || exit 0
+          cd "$(dirname "$f")"
+          LAKESIDE_LAUNCHER=1 timeout 15 xvfb-run -a -s "-screen 0 1280x800x24" "$f" 2>&1 | tail -60 || true
+          echo "exit: ${PIPESTATUS[0]}"
+          ldd --version | head -1; echo "GL: $(ls /usr/lib/x86_64-linux-gnu | grep -c -i -E 'libGL|libvulkan|libEGL')"
+
       - name: Grand Century (AppImage, free path)
         if: ${{ inputs.games == '' || contains(inputs.games, 'grand-century') }}
         timeout-minutes: 15
