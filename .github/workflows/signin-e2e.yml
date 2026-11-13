@@ -1,0 +1,102 @@
+name: signin e2e
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Released launcher version to test
+        default: '0.4.1'
+
+permissions:
+  contents: read
+
+jobs:
+  signin:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install playwright-core only
+        shell: pwsh
+        run: |
+          Set-Location e2e
+          npm init -y | Out-Null
+          npm install playwright-core --no-audit --no-fund
+
+      - name: Install the released launcher
+        shell: pwsh
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          $ProgressPreference = 'SilentlyContinue'
+          $url = "https://lakesidegames.net/download/launcher/Lakeside_${env:VERSION}_x64-setup.exe"
+          $file = Join-Path $env:RUNNER_TEMP 'Lakeside-setup.exe'
+          Invoke-WebRequest -Uri $url -OutFile $file
+          Start-Process -FilePath $file -ArgumentList '/S' -Wait
+          Start-Sleep -Seconds 5
+          $entry = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue |
+            Where-Object { $_.DisplayName -eq 'Lakeside' } | Select-Object -First 1
+          $location = $entry.InstallLocation.Trim('"')
+          "installed=" + $entry.DisplayVersion
+          if ($entry.DisplayVersion -ne $env:VERSION) { throw "expected $env:VERSION, got $($entry.DisplayVersion)" }
+          $exe = Get-ChildItem -Path $location -Recurse -Filter '*.exe' |
+            Where-Object { $_.Name -notmatch 'uninstall' } | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $exe) { throw 'launcher executable not found' }
+          "LAUNCHER_EXE=$exe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Start Edge with a debugging port and make it the default opener
+        shell: pwsh
+        run: |
+          $edge = 'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe'
+          if (-not (Test-Path $edge)) { $edge = 'C:\Program Files\Microsoft\Edge\Application\msedge.exe' }
+          $profileDir = Join-Path $env:RUNNER_TEMP 'edge-profile'
+          $progId = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice' -ErrorAction SilentlyContinue).ProgId
+          "default https ProgId: $progId"
+          # The launcher opens URLs with `cmd /C start`, which runs the default
+          # browser command. Point that command at Edge with the same flags and
+          # profile as the running instance so the URL lands as a new tab there.
+          $cmd = "`"$edge`" --remote-debugging-port=9223 --user-data-dir=`"$profileDir`" --no-first-run --single-argument %1"
+          foreach ($id in @($progId, 'MSEdgeHTM', 'ChromeHTML', 'FirefoxURL') | Where-Object { $_ } | Select-Object -Unique) {
+            $key = "HKCU:\Software\Classes\$id\shell\open\command"
+            New-Item -Path $key -Force | Out-Null
+            Set-ItemProperty -Path $key -Name '(default)' -Value $cmd
+          }
+          "approach: HKCU handler override for $progId and MSEdgeHTM pointing at Edge with debugging port and shared profile"
+          Start-Process -FilePath $edge -ArgumentList "--remote-debugging-port=9223", "--user-data-dir=$profileDir", "--no-first-run", "about:blank"
+          for ($i = 0; $i -lt 30; $i++) {
+            try { Invoke-RestMethod http://127.0.0.1:9223/json/version | Out-Null; 'edge CDP up'; break } catch { Start-Sleep -Seconds 1 }
+          }
+
+      - name: Start the launcher with a debugging port
+        shell: pwsh
+        run: |
+          $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = '--remote-debugging-port=9222'
+          Start-Process -FilePath $env:LAUNCHER_EXE
+          for ($i = 0; $i -lt 60; $i++) {
+            try { Invoke-RestMethod http://127.0.0.1:9222/json/version | Out-Null; 'launcher CDP up'; break } catch { Start-Sleep -Seconds 1 }
+          }
+
+      - name: Sign in end to end
+        shell: pwsh
+        env:
+          LAKESIDE_TEST_USERNAME: ${{ secrets.LAKESIDE_TEST_USERNAME }}
+          LAKESIDE_TEST_PASSWORD: ${{ secrets.LAKESIDE_TEST_PASSWORD }}
+          SHOT_DIR: ${{ github.workspace }}\e2e-shots
+        run: |
+          Write-Host "::add-mask::$env:LAKESIDE_TEST_USERNAME"
+          Write-Host "::add-mask::$env:LAKESIDE_TEST_PASSWORD"
+          node e2e/signin.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: signin-e2e-shots
+          path: e2e-shots
+          if-no-files-found: ignore
