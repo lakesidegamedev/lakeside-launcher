@@ -91,9 +91,10 @@ const has = (body, wanted) => body.includes(wanted.toLowerCase());
   check(await page.locator("nav.tabs .tab.on").innerText() === "Home", "Home is the default screen");
   check(has(body, "Corporate Warfare 2.0 is out"), "Home carousel shows the first slide");
   check(has(body, "Continue playing"), "Home lists Continue playing");
-  // The free-access answer arrives after first paint; wait for its slide to join the carousel.
-  await page.waitForFunction(() => document.querySelectorAll(".hm-dot").length === 2, null, { timeout: 15000 });
-  await page.locator(".hm-arrow[aria-label='Next slide']").click();
+  // The free-access answer arrives after first paint; wait for its slide to join the carousel,
+  // then jump to it with its dot (the demo library also adds an Update slide).
+  await page.waitForSelector(".hm-dot[aria-label$='Free to play']", { timeout: 15000, state: "attached" });
+  await page.locator(".hm-dot[aria-label$='Free to play']").click();
   check(has(await text(page), "Everything is free to play while A House Divided is paused"), "free-to-play slide shows while the switch is on");
   await shot(page, "home");
 
