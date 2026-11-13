@@ -107,7 +107,7 @@ async function waitForConsentOrCallback() {
 }
 
 async function cardFor(title) {
-  const card = launcherPage.locator("article.game-card").filter({ has: launcherPage.getByRole("heading", { name: title, exact: true }) }).first();
+  const card = launcherPage.locator("tr").filter({ has: launcherPage.locator("b", { hasText: title }) }).first();
   await card.waitFor({ timeout: 15000 });
   return card;
 }
@@ -133,7 +133,7 @@ async function main() {
 
   const before = new Set(browserCtx.pages());
   await stage("click-sign-in", 45000, async () => {
-    const btn = launcherPage.getByRole("button", { name: "Sign in with A House Divided" }).first();
+    const btn = launcherPage.getByRole("button", { name: "Sign in with Lakeside Games" }).first();
     await btn.waitFor({ timeout: 30000 });
     await btn.click();
   });
@@ -161,7 +161,7 @@ async function main() {
   console.log(`sign-in path: ${path}`);
 
   await stage("launcher-signed-in", 60000, async () => {
-    const chip = launcherPage.locator(".account-chip strong").first();
+    const chip = launcherPage.locator("button.acct .acct-name").first();
     await chip.waitFor({ timeout: 55000 });
     const shown = (await chip.textContent())?.trim() ?? "";
     if (!shown) throw new Error("account chip is empty");
@@ -178,7 +178,7 @@ async function main() {
 
   // lakesidetest1 owns nothing: Corporate Warfare must offer Buy, never Install.
   await stage("paid-product-shows-buy", 45000, async () => {
-    await launcherPage.getByRole("button", { name: "Store" }).first().click();
+    await launcherPage.getByRole("button", { name: "Store", exact: true }).first().click();
     const card = await cardFor("Corporate Warfare");
     const action = card.getByRole("button").first();
     const label = (await action.textContent())?.trim() ?? "";
@@ -188,7 +188,7 @@ async function main() {
     const library = await launcherPage.getByRole("button", { name: "Library" }).first();
     await library.click();
     await sleep(1000);
-    if (await launcherPage.locator("article.game-card").filter({ hasText: "Corporate Warfare" }).count()) {
+    if (await launcherPage.locator("table.lib tr").filter({ hasText: "Corporate Warfare" }).count()) {
       throw new Error("Corporate Warfare is in the library of an account without it");
     }
   });

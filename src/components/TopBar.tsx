@@ -50,7 +50,7 @@ export function TopBar({ view, onView, downloadCount, accountName, onAccount }: 
             <span className="av" aria-hidden="true">
               {accountName.slice(0, 1).toUpperCase()}
             </span>
-            {accountName}
+            <span className="acct-name">{accountName}</span>
           </>
         ) : (
           "Sign in"
