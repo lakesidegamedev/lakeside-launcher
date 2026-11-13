@@ -1,143 +1,135 @@
 import { describe, expect, it } from "vitest";
 import {
   CATALOG,
+  PRODUCTS_BY_ID,
   canLaunchDesktop,
   executableFor,
   formatPrice,
+  installerSupported,
   libraryProducts,
   ownsProduct,
-  storeProducts,
   type Entitlements,
 } from "./catalog";
 
-const owned: Entitlements = { "ahd-client": "owned", "us-historical": "owned" };
+const owned: Entitlements = { "ahd-singleplayer": "owned" };
+
+function product(id: string) {
+  const found = PRODUCTS_BY_ID.get(id);
+  if (!found) throw new Error(`missing ${id}`);
+  return found;
+}
 
 describe("catalog integrity", () => {
   it("has unique ids", () => {
-    const ids = CATALOG.map((product) => product.id);
+    const ids = CATALOG.map((entry) => entry.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it("keeps commercial product ids unique", () => {
-    const ids = CATALOG.map((product) => product.productId).filter(
-      (id): id is string => id !== null && !id.startsWith("ahd-"),
-    );
-    expect(new Set(ids).size).toBe(ids.length);
+  it("carries no prices: money comes from the live catalog", () => {
+    for (const entry of CATALOG) {
+      expect(entry, entry.id).not.toHaveProperty("priceCents");
+    }
   });
 
-  it("gives every available web product an https url", () => {
-    for (const product of CATALOG) {
-      if (product.delivery === "web" && product.status === "available") {
-        expect(product.webUrl, product.id).toMatch(/^https:\/\//);
+  it("gives every web game an https url", () => {
+    for (const entry of CATALOG) {
+      if (entry.delivery === "web") expect(entry.webUrl, entry.id).toMatch(/^https:\/\//);
+    }
+  });
+
+  it("gives every installable native game a windows and linux executable", () => {
+    for (const entry of CATALOG) {
+      if (entry.delivery === "native" && !entry.registryApp) {
+        expect(entry.executables?.windows, entry.id).toBeTruthy();
+        expect(entry.executables?.linux, entry.id).toBeTruthy();
       }
     }
   });
 
-  it("gives every native product a windows and linux executable", () => {
-    for (const product of CATALOG) {
-      if (product.delivery === "native" && !product.registryApp) {
-        expect(product.executables?.windows, product.id).toBeTruthy();
-        expect(product.executables?.linux, product.id).toBeTruthy();
-      }
-    }
+  it("points every store link at lakesidegames.net", () => {
+    for (const entry of CATALOG) expect(entry.storeUrl, entry.id).toMatch(/^https:\/\/lakesidegames\.net\//);
+  });
+
+  it("links the Margin of Victory browser game and desktop app both ways", () => {
+    const web = product("electioneer");
+    const desktop = product("margin-of-victory");
+    expect(web.companion).toBe("margin-of-victory");
+    expect(desktop.companionOf).toBe("electioneer");
+    expect(desktop.registryApp).toBe(true);
+    expect(desktop.handoffClientId).toBe("margin-of-victory");
   });
 });
 
 describe("ownership", () => {
-  it("treats free products as owned", () => {
-    const free = CATALOG.find((product) => product.id === "electioneer");
-    expect(free).toBeDefined();
-    expect(ownsProduct(free!, {})).toBe(true);
+  it("lets free games run without an entitlement", () => {
+    expect(ownsProduct(product("grand-century"), {})).toBe(true);
+    expect(ownsProduct(product("electioneer"), {})).toBe(true);
   });
 
-  it("requires an entitlement for paid native products", () => {
-    const ahd = CATALOG.find((product) => product.id === "ahd")!;
+  it("accepts the current and the legacy AHD entitlement id", () => {
+    const ahd = product("ahd");
     expect(ownsProduct(ahd, {})).toBe(false);
-    expect(canLaunchDesktop(ahd, {})).toBe(false);
-    expect(canLaunchDesktop(ahd, owned)).toBe(true);
+    expect(ownsProduct(ahd, { "ahd-singleplayer": "owned" })).toBe(true);
+    expect(ownsProduct(ahd, { "ahd-client": "owned" })).toBe(true);
   });
 
   it("does not let a refunded purchase launch", () => {
-    const ahd = CATALOG.find((product) => product.id === "ahd")!;
-    expect(ownsProduct(ahd, { "ahd-client": "refunded" })).toBe(false);
+    expect(ownsProduct(product("ahd"), { "ahd-singleplayer": "refunded" })).toBe(false);
+    expect(canLaunchDesktop(product("ahd"), { "ahd-singleplayer": "refunded" })).toBe(false);
   });
 
-  it("lists owned and free tiles in the library", () => {
-    const ids = libraryProducts(owned).map((product) => product.id);
-    expect(ids).toContain("ahd");
+  it("needs an owned Corporate Warfare purchase", () => {
+    const cw = product("corporate-warfare");
+    expect(ownsProduct(cw, {})).toBe(false);
+    expect(ownsProduct(cw, { "corporate-warfare": "owned" })).toBe(true);
+    expect(cw.authenticatedDownload).toBe(true);
+    expect(cw.handoffClientId).toBe("corporate-warfare-desktop");
+  });
+});
+
+describe("library rows", () => {
+  it("lists Margin of Victory once, with the desktop app folded into it", () => {
+    const ids = libraryProducts({}).map((entry) => entry.id);
     expect(ids).toContain("electioneer");
-    expect(ids).toContain("grand-century");
+    expect(ids).not.toContain("margin-of-victory");
   });
 
-  it("keeps the Margin of Victory web tile and adds a registry-detected desktop entry", () => {
-    const web = CATALOG.find((product) => product.id === "electioneer")!;
-    const desktop = CATALOG.find((product) => product.id === "margin-of-victory")!;
-    expect(web.delivery).toBe("web");
-    expect(desktop.registryApp).toBe(true);
-    expect(desktop.handoffClientId).toBe("margin-of-victory");
-    expect(desktop.platforms).toEqual(["windows"]);
-  });
-
-  it("lists unowned priced products in the store", () => {
-    const ids = storeProducts({}).map((product) => product.id);
+  it("keeps browser-playable games in the library without a purchase", () => {
+    const ids = libraryProducts({}).map((entry) => entry.id);
     expect(ids).toContain("ahd");
-    expect(ids).toContain("us-historical");
-    expect(ids).not.toContain("electioneer");
+    expect(ids).toContain("grand-century");
+    expect(ids).not.toContain("corporate-warfare");
   });
 
-  it("lists the free browser game in the library, not the store", () => {
-    expect(libraryProducts(owned).map((product) => product.id)).toContain("grand-century");
-    expect(storeProducts(owned).map((product) => product.id)).not.toContain("grand-century");
+  it("adds Corporate Warfare once it is owned", () => {
+    expect(libraryProducts({ "corporate-warfare": "owned" }).map((entry) => entry.id)).toContain(
+      "corporate-warfare",
+    );
+    expect(libraryProducts(owned).length).toBeGreaterThan(0);
   });
 });
 
 describe("platform helpers", () => {
   it("maps executables per platform", () => {
-    const ahd = CATALOG.find((product) => product.id === "ahd")!;
+    const ahd = product("ahd");
     expect(executableFor(ahd, "windows")).toContain("AHDClient");
     expect(executableFor(ahd, "linux")).toContain("ahdclient");
     expect(executableFor(ahd, "browser")).toBeNull();
   });
 
   it("formats cents as dollars", () => {
-    expect(formatPrice(2000, "usd")).toBe("$20.00");
-    expect(formatPrice(499, "usd")).toBe("$4.99");
-  });
-});
-
-describe("native delivery metadata", () => {
-  it("keeps AHD on the public manifest URL with no handoff", () => {
-    const ahd = CATALOG.find((product) => product.id === "ahd");
-    expect(ahd?.authenticatedDownload).toBeUndefined();
-    expect(ahd?.handoffClientId).toBeUndefined();
+    expect(formatPrice(1499, "usd")).toBe("$14.99");
+    expect(formatPrice(99, "usd")).toBe("$0.99");
   });
 
-  it("opts Corporate Warfare into paid downloads and the handoff", () => {
-    const cw = CATALOG.find((product) => product.id === "corporate-warfare");
-    expect(cw?.productId).toBe("corporate-warfare");
-    expect(cw?.authenticatedDownload).toBe(true);
-    expect(cw?.handoffClientId).toBe("corporate-warfare-desktop");
-    expect(cw?.executables?.linux).toMatch(/\.AppImage$/);
-  });
-
-  it("prices Corporate Warfare at $14.99 and sends Buy to its store page", () => {
-    const cw = CATALOG.find((product) => product.id === "corporate-warfare")!;
-    expect(cw.priceCents).toBe(1499);
-    expect(cw.storeUrl).toBe("https://lakesidegames.net/store/corporate-warfare");
-    expect(ownsProduct(cw, {})).toBe(false);
-    expect(ownsProduct(cw, { "corporate-warfare": "owned" })).toBe(true);
-    expect(storeProducts({}).some((product) => product.id === cw.id)).toBe(true);
-    expect(storeProducts({ "corporate-warfare": "owned" }).some((product) => product.id === cw.id)).toBe(false);
-  });
-
-  it("supports the right installer kinds per platform", async () => {
-    const { installerSupported } = await import("./catalog");
-    expect(installerSupported("nsis", "windows")).toBe(true);
+  it("runs only the installers it can handle", () => {
     expect(installerSupported("inno", "windows")).toBe(true);
+    expect(installerSupported("nsis", "windows")).toBe(true);
     expect(installerSupported("appimage", "linux")).toBe(true);
     expect(installerSupported("appimage", "windows")).toBe(false);
     expect(installerSupported("dmg", "macos")).toBe(true);
     expect(installerSupported("dmg", "linux")).toBe(false);
     expect(installerSupported("appimage", "macos")).toBe(false);
+    expect(installerSupported("msi", "windows")).toBe(false);
   });
 });

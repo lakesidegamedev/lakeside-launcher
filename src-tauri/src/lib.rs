@@ -1530,6 +1530,101 @@ async fn platform_entitlements(app: AppHandle) -> Result<HashMap<String, String>
     parse_entitlements(&bytes)
 }
 
+/// The live store catalog (names, prices, add-ons, supporter tiers). Read here
+/// because the webview is not allowed to call the site cross-origin.
+#[tauri::command]
+async fn fetch_live_catalog() -> Result<serde_json::Value, String> {
+    let client = reqwest::Client::builder()
+        .user_agent("lakeside-launcher")
+        .timeout(Duration::from_secs(15))
+        .build()
+        .map_err(|error| format!("Could not build the catalog client: {error}"))?;
+    let bytes = client
+        .get(format!("{}/account/api/catalog", platform_base()))
+        .send()
+        .await
+        .map_err(|error| format!("Could not reach the store catalog: {error}"))?
+        .error_for_status()
+        .map_err(|error| format!("The store catalog returned {error}"))?
+        .bytes()
+        .await
+        .map_err(|error| format!("Could not read the store catalog: {error}"))?;
+    serde_json::from_slice(&bytes).map_err(|error| format!("The store catalog is malformed: {error}"))
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PatchNote {
+    version: String,
+    published_at: Option<String>,
+    body: String,
+}
+
+/// Owner and repository from a GitHub release page URL of the studio's own
+/// organisation, or None for anything else.
+fn studio_repo(notes_url: &str) -> Option<(String, String)> {
+    let parsed = Url::parse(notes_url).ok()?;
+    if parsed.scheme() != "https" || parsed.host_str() != Some("github.com") {
+        return None;
+    }
+    let mut parts = parsed.path_segments()?;
+    let owner = parts.next()?;
+    let repo = parts.next()?;
+    if !owner.eq_ignore_ascii_case("lakesidegamedev") || repo.is_empty() {
+        return None;
+    }
+    Some((owner.to_string(), repo.to_string()))
+}
+
+/// The latest few published release notes of a game, from its GitHub releases.
+/// Empty when there are none or the release page is not the studio's.
+#[tauri::command]
+async fn patch_notes(notes_url: String, limit: Option<u8>) -> Result<Vec<PatchNote>, String> {
+    let Some((owner, repo)) = studio_repo(&notes_url) else {
+        return Ok(Vec::new());
+    };
+    let limit = limit.unwrap_or(3).clamp(1, 10);
+    let client = reqwest::Client::builder()
+        .user_agent("lakeside-launcher")
+        .timeout(Duration::from_secs(15))
+        .build()
+        .map_err(|error| format!("Could not build the release client: {error}"))?;
+    let response = client
+        .get(format!(
+            "https://api.github.com/repos/{owner}/{repo}/releases?per_page={limit}"
+        ))
+        .header("Accept", "application/vnd.github+json")
+        .send()
+        .await
+        .map_err(|error| format!("Could not reach the release notes: {error}"))?;
+    if response.status() == reqwest::StatusCode::NOT_FOUND {
+        return Ok(Vec::new());
+    }
+    let releases: Vec<serde_json::Value> = response
+        .error_for_status()
+        .map_err(|error| format!("Release notes returned {error}"))?
+        .json()
+        .await
+        .map_err(|error| format!("Release notes are malformed: {error}"))?;
+    Ok(releases
+        .iter()
+        .filter(|entry| !entry["draft"].as_bool().unwrap_or(false))
+        .filter_map(|entry| {
+            let body = entry["body"].as_str().unwrap_or("").trim().to_string();
+            if body.is_empty() {
+                return None;
+            }
+            let tag = entry["tag_name"].as_str()?;
+            Some(PatchNote {
+                version: tag.trim_start_matches('v').to_string(),
+                published_at: entry["published_at"].as_str().map(str::to_string),
+                body,
+            })
+        })
+        .take(limit as usize)
+        .collect())
+}
+
 #[tauri::command]
 fn platform_sign_out(app: AppHandle) -> Result<(), String> {
     if let Ok(path) = session_file(&app) {
@@ -1623,7 +1718,9 @@ pub fn run() {
             platform_session,
             platform_exchange,
             platform_entitlements,
-            platform_sign_out
+            platform_sign_out,
+            fetch_live_catalog,
+            patch_notes
         ])
         .run(tauri::generate_context!())
         .expect("error while running the Lakeside launcher");
@@ -1639,6 +1736,17 @@ mod tests {
         assert!(host_allowed("auth.lakesidegames.net", EXTERNAL_HOSTS));
         assert!(!host_allowed("evillakesidegames.net", EXTERNAL_HOSTS));
         assert!(!host_allowed("lakesidegames.net.evil.test", EXTERNAL_HOSTS));
+    }
+
+    #[test]
+    fn patch_notes_only_read_the_studio_repositories() {
+        assert_eq!(
+            studio_repo("https://github.com/lakesidegamedev/AHDClient/releases/tag/v2.11.0"),
+            Some(("lakesidegamedev".to_string(), "AHDClient".to_string()))
+        );
+        assert!(studio_repo("https://github.com/someone/else/releases/tag/v1").is_none());
+        assert!(studio_repo("http://github.com/lakesidegamedev/x/releases").is_none());
+        assert!(studio_repo("https://evil.test/lakesidegamedev/x").is_none());
     }
 
     #[test]

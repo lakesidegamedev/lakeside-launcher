@@ -188,3 +188,68 @@ export async function platformEntitlements(): Promise<Record<string, string>> {
 export async function platformSignOut(): Promise<void> {
   await invoke<void>("platform_sign_out");
 }
+
+/** The live store catalog as raw JSON. Browser previews ask the site directly. */
+export async function fetchLiveCatalog(): Promise<unknown> {
+  if (isDesktop()) return invoke<unknown>("fetch_live_catalog");
+  const response = await fetch("https://lakesidegames.net/account/api/catalog");
+  if (!response.ok) throw new Error(`The store catalog returned ${response.status}`);
+  return response.json();
+}
+
+export interface PatchNote {
+  version: string;
+  publishedAt: string | null;
+  body: string;
+}
+
+/** The latest published release notes behind a manifest notes link. Empty when none. */
+export async function getPatchNotes(notesUrl: string, limit = 3): Promise<PatchNote[]> {
+  return invoke<PatchNote[]>("patch_notes", { notesUrl, limit });
+}
+
+/**
+ * Backend commands the redesigned screens use that may not exist in this build
+ * of the desktop shell. The Rust side reports its own list through
+ * `launcher_capabilities`; a shell without that command supports none of them.
+ */
+export type Capability =
+  | "open_install_folder"
+  | "repair_install"
+  | "uninstall_product"
+  | "install_details"
+  | "set_install_root"
+  | "verify_installed"
+  | "pause_download";
+
+export async function getCapabilities(): Promise<ReadonlySet<Capability>> {
+  try {
+    const list = await invoke<string[]>("launcher_capabilities");
+    return new Set(list as Capability[]);
+  } catch {
+    return new Set();
+  }
+}
+
+export async function openInstallFolder(productId: string): Promise<void> {
+  await invoke<void>("open_install_folder", { productId });
+}
+
+export async function repairInstall(productId: string): Promise<void> {
+  await invoke<void>("repair_install", { productId });
+}
+
+export async function uninstallProduct(productId: string): Promise<void> {
+  await invoke<void>("uninstall_product", { productId });
+}
+
+export interface InstallDetails {
+  location: string;
+  sizeBytes: number | null;
+  lastPlayedAt: number | null;
+  freeSpaceBytes: number | null;
+}
+
+export async function installDetails(productId: string): Promise<InstallDetails> {
+  return invoke<InstallDetails>("install_details", { productId });
+}
