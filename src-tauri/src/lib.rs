@@ -9,7 +9,10 @@
 //   root and rejected if it escapes.
 // - External URLs and game URLs must be https on Lakeside-owned hosts.
 
+mod home;
 mod installer;
+mod manage;
+mod shell;
 
 use std::collections::HashMap;
 use std::io::{Read, Write};
@@ -116,6 +119,15 @@ fn write_install_state(app: &AppHandle, state: &InstallState) -> Result<(), Stri
         .map_err(|error| format!("Could not finalize the install state: {error}"))
 }
 
+/// Drop a product from the launcher's install record (after an uninstall).
+fn forget_install(app: &AppHandle, product_id: &str) -> Result<(), String> {
+    let mut state = read_install_state(app);
+    if state.remove(product_id).is_some() {
+        write_install_state(app, &state)?;
+    }
+    Ok(())
+}
+
 fn record_install(
     app: &AppHandle,
     product_id: &str,
@@ -185,6 +197,7 @@ fn installed_executable(product_id: &str) -> Option<&'static str> {
     match product_id {
         // Tauri NSIS installs per-user into %LOCALAPPDATA%\AHDClient.
         "ahd" => Some("AHDClient/ahdclient-desktop.exe"),
+        "grand-century-desktop" => Some("GrandCentury/GrandCentury.exe"),
         other => installer::windows_inno_executable(other),
     }
 }
@@ -261,6 +274,16 @@ fn install_root(app: &AppHandle) -> PathBuf {
             return PathBuf::from(trimmed);
         }
     }
+    // The player's own choice, when it is still a valid folder.
+    if let Some(saved) = shell::read_settings(app).install_root {
+        if manage::validate_install_root(&saved).is_ok() {
+            return PathBuf::from(saved.trim());
+        }
+    }
+    default_install_root(app)
+}
+
+fn default_install_root(app: &AppHandle) -> PathBuf {
     // Tauri NSIS installs per-user to %LOCALAPPDATA%\AHDClient, so the catalog
     // path AHDClient/ahdclient-desktop.exe resolves from LOCALAPPDATA.
     #[cfg(target_os = "windows")]
@@ -332,7 +355,7 @@ async fn fetch_handoff_code(app: &AppHandle, client_id: &str) -> Option<String> 
         .build()
         .ok()?;
     let response = client
-        .post(format!("{}/account/launcher/handoff", platform_base()))
+        .post(installer::handoff_url(&platform_base()))
         .bearer_auth(&stored.token)
         .json(&serde_json::json!({ "clientId": client_id }))
         .send()
@@ -367,7 +390,9 @@ async fn launch_product(
 
     let root = install_root(&app);
     let binary = safe_join(&root, &executable)?;
-    spawn_game(&app, &binary, handoff_client_id.as_deref()).await
+    spawn_game(&app, &binary, handoff_client_id.as_deref()).await?;
+    shell::record_played(&app, &product_id);
+    Ok(())
 }
 
 /// Start a game binary detached from the launcher. Games that opt in
@@ -513,7 +538,9 @@ async fn launch_desktop_app(
     }
     let found = find_desktop_app(&product_id)
         .ok_or_else(|| "That app is not installed on this computer.".to_string())?;
-    spawn_game(&app, &found.executable, handoff_client_id.as_deref()).await
+    spawn_game(&app, &found.executable, handoff_client_id.as_deref()).await?;
+    shell::record_played(&app, &product_id);
+    Ok(())
 }
 
 /// Open a game inside a dedicated window with no launcher capabilities. Reuses
@@ -997,7 +1024,17 @@ where
         installer::InstallerKind::Nsis => {
             #[cfg(target_os = "windows")]
             {
-                match std::process::Command::new(&destination).arg("/S").status() {
+                use std::os::windows::process::CommandExt;
+                let mut command = std::process::Command::new(&destination);
+                command.arg("/S");
+                // The NSIS directory switch has to come last and unquoted.
+                if let Some(relative) = manage::product_dir_relative(product_id, "windows") {
+                    let directory = relative
+                        .split('/')
+                        .fold(install_root.clone(), |path, part| path.join(part));
+                    command.raw_arg(format!("/D={}", directory.display()));
+                }
+                match command.status() {
                     Ok(status) if status.success() => Ok(()),
                     Ok(_) => Err("The installer reported a failure.".to_string()),
                     Err(error) => Err(format!("Could not start the installer: {error}")),
@@ -1720,7 +1757,15 @@ pub fn run() {
             platform_entitlements,
             platform_sign_out,
             fetch_live_catalog,
-            patch_notes
+            patch_notes,
+            shell::launcher_capabilities,
+            shell::install_details,
+            shell::open_install_folder,
+            shell::uninstall_product,
+            shell::get_install_root,
+            shell::set_install_root,
+            shell::fetch_home_feed,
+            shell::free_access_status
         ])
         .run(tauri::generate_context!())
         .expect("error while running the Lakeside launcher");

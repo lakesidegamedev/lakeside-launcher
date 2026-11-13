@@ -18,6 +18,41 @@ import { createPrivateKey, sign } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
+/**
+ * Desktop builds that may not exist yet. A missing release, or a lookup that
+ * fails, leaves the product out of the manifest; it never breaks the others.
+ */
+const OPTIONAL_DESKTOP = [
+  {
+    // Margin of Victory desktop app. The launcher offers its setup when this
+    // entry has a Windows artifact, else the row is browser only.
+    id: "margin-of-victory",
+    name: "Margin of Victory",
+    repo: "lakesidegamedev/MOVGame",
+    optional: true,
+    artifacts: [
+      { key: "windows-x64", match: /_x64-setup\.exe$/i, kind: "nsis" },
+      { key: "macos-arm64", match: /_aarch64\.dmg$/i, kind: "dmg" },
+      { key: "linux-x64", match: /_amd64\.AppImage$/i, kind: "appimage" },
+    ],
+  },
+  {
+    // Grand Century desktop app, read from the studio-affiliated repository's
+    // latest release. No desktop release exists yet; until one does the row
+    // stays "Play in browser".
+    id: "grand-century-desktop",
+    name: "Grand Century",
+    repo: "Egg3901/grand-century",
+    optional: true,
+    artifacts: [
+      { key: "windows-x64", match: /^GrandCentury_.*_x64-setup\.exe$/i, kind: "nsis" },
+      { key: "linux-x64", match: /^GrandCentury_.*_amd64\.AppImage$/i, kind: "appimage" },
+      { key: "linux-deb", match: /^GrandCentury_.*_amd64\.deb$/i, kind: "deb" },
+      { key: "macos-arm64", match: /^GrandCentury_.*_aarch64\.dmg$/i, kind: "dmg" },
+    ],
+  },
+];
+
 export const PRODUCTS = [
   {
     id: "ahd",
@@ -46,6 +81,7 @@ export const PRODUCTS = [
       { key: "linux-deb", match: /_amd64\.deb$/i, kind: "deb" },
     ],
   },
+  ...OPTIONAL_DESKTOP,
 ];
 
 export function normalizeVersion(tag) {
@@ -132,7 +168,14 @@ async function fetchLatest(repo, token) {
 
 export async function collectReleases({ products = PRODUCTS, token = process.env.GITHUB_TOKEN } = {}) {
   const entries = await Promise.all(
-    products.map(async (product) => [product.repo, await fetchLatest(product.repo, token)]),
+    products.map(async (product) => {
+      try {
+        return [product.repo, await fetchLatest(product.repo, token)];
+      } catch (error) {
+        if (product.optional) return [product.repo, null];
+        throw error;
+      }
+    }),
   );
   return Object.fromEntries(entries);
 }

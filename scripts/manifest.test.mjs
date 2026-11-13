@@ -122,7 +122,48 @@ describe("manifest", () => {
 
   it("has a product config for every known launcher product", () => {
     const ids = PRODUCTS.map((product) => product.id);
-    assert.deepEqual(ids, ["ahd", "corporate-warfare"]);
+    assert.deepEqual(ids, ["ahd", "corporate-warfare", "margin-of-victory", "grand-century-desktop"]);
+  });
+
+  it("reads Grand Century desktop builds from its release, and leaves it out when there are none", () => {
+    const repo = "Egg3901/grand-century";
+    const asset = (name) => ({ name, browser_download_url: `https://example.test/${name}`, size: 1, digest: `sha256:${"a".repeat(64)}` });
+    const none = buildManifest({ releases: { [repo]: { tag_name: "v1.7.0", assets: [] } } });
+    assert.equal(none.products["grand-century-desktop"], undefined);
+    const built = buildManifest({
+      releases: {
+        [repo]: {
+          tag_name: "v1.8.0",
+          assets: [
+            asset("GrandCentury_1.8.0_x64-setup.exe"),
+            asset("GrandCentury_1.8.0_amd64.AppImage"),
+            asset("GrandCentury_1.8.0_amd64.deb"),
+            asset("GrandCentury_1.8.0_aarch64.dmg"),
+            asset("notes.txt"),
+          ],
+        },
+      },
+    });
+    const entry = built.products["grand-century-desktop"];
+    assert.equal(entry.version, "1.8.0");
+    assert.deepEqual(Object.keys(entry.artifacts).sort(), ["linux-deb", "linux-x64", "macos-arm64", "windows-x64"]);
+    assert.equal(entry.artifacts["windows-x64"].kind, "nsis");
+    assert.equal(entry.artifacts["macos-arm64"].kind, "dmg");
+  });
+
+  it("offers a Margin of Victory desktop entry only when a setup is attached", () => {
+    const repo = "lakesidegamedev/MOVGame";
+    const noAsset = buildManifest({ releases: { [repo]: { tag_name: "v2.0.0", assets: [] } } });
+    assert.equal(noAsset.products["margin-of-victory"], undefined);
+    const withSetup = buildManifest({
+      releases: {
+        [repo]: {
+          tag_name: "v2.0.0",
+          assets: [{ name: "Margin.of.Victory_2.0.0_x64-setup.exe", browser_download_url: "https://example.test/m.exe", size: 2, digest: `sha256:${"b".repeat(64)}` }],
+        },
+      },
+    });
+    assert.equal(withSetup.products["margin-of-victory"].artifacts["windows-x64"].kind, "nsis");
   });
 
   it("signs the exact manifest payload with ed25519", () => {

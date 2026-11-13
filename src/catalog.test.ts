@@ -87,6 +87,31 @@ describe("ownership", () => {
   });
 });
 
+describe("every game has a way in", () => {
+  it("uses the new Margin of Victory browser address", () => {
+    expect(product("electioneer").webUrl).toBe("https://lakesidegames.net/games/margin-of-victory/");
+    expect(product("margin-of-victory").webUrl).toBe("https://lakesidegames.net/games/margin-of-victory/");
+    for (const entry of CATALOG) expect(entry.webUrl ?? "", entry.id).not.toContain("games/electioneer");
+  });
+
+  it("gives Grand Century a desktop companion that falls back to the browser game", () => {
+    const row = product("grand-century");
+    const desktop = product("grand-century-desktop");
+    expect(row.companion).toBe("grand-century-desktop");
+    expect(row.webUrl).toBe("https://lakesidegames.net/games/grand-century/");
+    expect(desktop.companionOf).toBe("grand-century");
+    expect(desktop.entitlementIds).toEqual([]);
+    expect(libraryProducts({}).map((entry) => entry.id)).not.toContain("grand-century-desktop");
+  });
+});
+
+describe("games start signed in", () => {
+  it("opts Corporate Warfare and the Margin of Victory desktop app into the launcher handoff", () => {
+    expect(product("corporate-warfare").handoffClientId).toBe("corporate-warfare-desktop");
+    expect(product("margin-of-victory").handoffClientId).toBe("margin-of-victory");
+  });
+});
+
 describe("library rows", () => {
   it("lists Margin of Victory once, with the desktop app folded into it", () => {
     const ids = libraryProducts({}).map((entry) => entry.id);
