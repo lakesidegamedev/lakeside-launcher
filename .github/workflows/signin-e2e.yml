@@ -78,12 +78,19 @@ jobs:
         shell: pwsh
         run: |
           $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = '--remote-debugging-port=9222'
+          # The env var alone was not applied to the webview (the app sets its own
+          # browser arguments), so also set the WebView2 per-app registry override.
+          foreach ($root in 'HKLM:', 'HKCU:') {
+            $key = "$root\SOFTWARE\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments"
+            New-Item -Path $key -Force | Out-Null
+            New-ItemProperty -Path $key -Name 'lakeside-launcher.exe' -Value '--remote-debugging-port=9222 --remote-allow-origins=*' -PropertyType String -Force | Out-Null
+          }
           Start-Process -FilePath $env:LAUNCHER_EXE -RedirectStandardOutput (Join-Path $env:RUNNER_TEMP 'launcher.out') -RedirectStandardError (Join-Path $env:RUNNER_TEMP 'launcher.err')
           for ($i = 0; $i -lt 25; $i++) {
             try { Invoke-RestMethod -TimeoutSec 3 http://127.0.0.1:9222/json/version | Out-Null; 'launcher CDP up'; break } catch { Start-Sleep -Seconds 1 }
           }
           Get-Process | Where-Object { $_.Name -match 'lakeside|msedgewebview2' } | Select-Object Name, Id | Format-Table -AutoSize | Out-String
-          Get-CimInstance Win32_Process -Filter "Name='msedgewebview2.exe'" | Select-Object -First 2 -ExpandProperty CommandLine
+          Get-CimInstance Win32_Process -Filter "Name='msedgewebview2.exe'" | Select-Object -First 1 -ExpandProperty CommandLine
           netstat -ano | Select-String ':922'
           Get-Content (Join-Path $env:RUNNER_TEMP 'launcher.err') -ErrorAction SilentlyContinue | Select-Object -First 20
 
