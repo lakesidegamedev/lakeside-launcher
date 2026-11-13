@@ -14,6 +14,8 @@ pub enum InstallerKind {
     Inno,
     AppImage,
     Dmg,
+    /// A Debian package: saved to Downloads, never run by the launcher.
+    Deb,
 }
 
 impl InstallerKind {
@@ -23,6 +25,7 @@ impl InstallerKind {
             "inno" => Some(Self::Inno),
             "appimage" => Some(Self::AppImage),
             "dmg" => Some(Self::Dmg),
+            "deb" => Some(Self::Deb),
             _ => None,
         }
     }
@@ -34,7 +37,14 @@ impl InstallerKind {
             Self::Nsis | Self::Inno => os == "windows",
             Self::AppImage => os == "linux",
             Self::Dmg => os == "macos",
+            Self::Deb => os == "linux",
         }
+    }
+
+    /// Kinds the launcher only downloads and shows in a folder: the player
+    /// finishes the install with the system.
+    pub fn save_only(self) -> bool {
+        matches!(self, Self::Dmg | Self::Deb)
     }
 }
 
@@ -62,6 +72,40 @@ pub fn inno_app_id(product_id: &str) -> Option<&'static str> {
         "corporate-warfare" => Some("{7C1E9A52-4D3B-4F6A-8E21-3A9D5B0C6F47}"),
         _ => None,
     }
+}
+
+/// Uninstall `DisplayName` values a product's own setup may register, for
+/// products found through the registry instead of a fixed path. Compared
+/// ignoring case and spaces; the values a real silent install writes are
+/// printed by the install check.
+pub fn registry_display_names(product_id: &str) -> &'static [&'static str] {
+    match product_id {
+        "grand-century-desktop" => &["Grand Century", "GrandCentury"],
+        _ => &[],
+    }
+}
+
+/// Program file name inside the install folder, for registry-found products.
+pub fn registry_executable_name(product_id: &str) -> Option<&'static str> {
+    match product_id {
+        "grand-century-desktop" => Some("grandcentury-desktop.exe"),
+        _ => None,
+    }
+}
+
+/// Whether an uninstall `DisplayName` is one of the product's registered names.
+pub fn display_name_matches(product_id: &str, display: &str) -> bool {
+    let squash = |text: &str| -> String {
+        text.chars()
+            .filter(|c| !c.is_whitespace())
+            .collect::<String>()
+            .to_lowercase()
+    };
+    let wanted = squash(display);
+    !wanted.is_empty()
+        && registry_display_names(product_id)
+            .iter()
+            .any(|name| squash(name) == wanted)
 }
 
 pub fn inno_uninstall_subkey(app_id: &str) -> String {
@@ -309,6 +353,7 @@ pub fn manifest_key_for_platform(platform: &str) -> Option<&'static str> {
     match platform {
         "windows-x86_64" => Some("windows-x64"),
         "linux-x86_64" => Some("linux-x64"),
+        "linux-x86_64-deb" => Some("linux-deb"),
         "macos-universal" => Some("macos-arm64"),
         _ => None,
     }
@@ -395,6 +440,11 @@ mod tests {
         assert!(!InstallerKind::AppImage.supported_on("windows"));
         assert!(InstallerKind::Nsis.supported_on("windows"));
         assert!(InstallerKind::Dmg.supported_on("macos"));
+        assert_eq!(InstallerKind::parse("deb"), Some(InstallerKind::Deb));
+        assert!(InstallerKind::Deb.supported_on("linux"));
+        assert!(!InstallerKind::Deb.supported_on("windows"));
+        assert!(InstallerKind::Deb.save_only() && InstallerKind::Dmg.save_only());
+        assert!(!InstallerKind::AppImage.save_only() && !InstallerKind::Inno.save_only());
         assert!(!InstallerKind::Dmg.supported_on("linux"));
     }
 
@@ -441,6 +491,36 @@ mod tests {
             windows_inno_executable("corporate-warfare"),
             Some("Programs/Corporate Warfare/Corporate Warfare.exe")
         );
+    }
+
+    #[test]
+    fn registry_names_match_ignoring_case_and_spaces() {
+        assert!(display_name_matches("grand-century-desktop", "Grand Century"));
+        assert!(display_name_matches("grand-century-desktop", " grandcentury "));
+        assert!(!display_name_matches("grand-century-desktop", "Grand Century Cheats"));
+        assert!(!display_name_matches("grand-century-desktop", ""));
+        assert!(!display_name_matches("ahd", "AHDClient"));
+        assert_eq!(
+            registry_executable_name("grand-century-desktop"),
+            Some("grandcentury-desktop.exe")
+        );
+    }
+
+    #[test]
+    fn unknown_account_platforms_are_ignored_and_the_deb_is_listed() {
+        let body = br#"{"version":"2.0.0","entitled":true,"files":[
+          {"platform":"windows-x86_64","name":"a-setup.exe","sha256":"ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12","installer":"inno"},
+          {"platform":"linux-x86_64-deb","name":"a.deb","sha256":"ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12","installer":"deb"},
+          {"platform":"macos-universal","name":"a.dmg","sha256":"ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12","installer":null},
+          {"platform":"beos-ppc","name":"a.zip","sha256":"ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12","installer":"zip"}]}"#;
+        let parsed = parse_account_release(body).expect("release");
+        let known: Vec<_> = parsed
+            .files
+            .iter()
+            .filter_map(|file| manifest_key_for_platform(&file.platform))
+            .collect();
+        // The null-installer Mac file is dropped by the parser; the unknown platform has no key.
+        assert_eq!(known, vec!["windows-x64", "linux-deb"]);
     }
 
     #[test]

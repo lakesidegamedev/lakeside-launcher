@@ -192,12 +192,118 @@ pub fn windows_inno_installed_version(product_id: &str) -> Option<String> {
     None
 }
 
+/// An install found through its own uninstall entry (display name from
+/// `installer::registry_display_names`, any publisher), in the per-user and
+/// all-users hives. The known folder under the install root is only a fallback.
+#[cfg(target_os = "windows")]
+#[derive(Debug, Clone)]
+pub struct RegisteredInstall {
+    pub version: String,
+    pub install_location: PathBuf,
+    pub executable: PathBuf,
+}
+
+#[cfg(target_os = "windows")]
+pub fn find_registered_install(product_id: &str) -> Option<RegisteredInstall> {
+    use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ};
+    use winreg::RegKey;
+
+    let exe_name = installer::registry_executable_name(product_id)?;
+    let base = r"Software\Microsoft\Windows\CurrentVersion\Uninstall";
+    let paths = [
+        (HKEY_CURRENT_USER, base),
+        (HKEY_LOCAL_MACHINE, base),
+        (HKEY_LOCAL_MACHINE, r"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"),
+    ];
+    for (hive, path) in paths {
+        let Ok(uninstall) = RegKey::predef(hive).open_subkey_with_flags(path, KEY_READ) else {
+            continue;
+        };
+        for name in uninstall.enum_keys().flatten() {
+            let Ok(key) = uninstall.open_subkey_with_flags(&name, KEY_READ) else {
+                continue;
+            };
+            let display: String = key.get_value("DisplayName").unwrap_or_default();
+            if !installer::display_name_matches(product_id, &display) {
+                continue;
+            }
+            let location = PathBuf::from(
+                key.get_value::<String, _>("InstallLocation")
+                    .unwrap_or_default()
+                    .trim()
+                    .trim_matches('"'),
+            );
+            let from_icon = key
+                .get_value::<String, _>("DisplayIcon")
+                .ok()
+                .and_then(|value| installer::exe_from_display_icon(&value))
+                .map(PathBuf::from);
+            let executable = [
+                Some(location.join(exe_name)).filter(|_| !location.as_os_str().is_empty()),
+                from_icon,
+            ]
+            .into_iter()
+            .flatten()
+            .find(|candidate| candidate.is_file());
+            let Some(executable) = executable else {
+                continue;
+            };
+            let install_location = if location.as_os_str().is_empty() {
+                executable.parent().map(Path::to_path_buf).unwrap_or_default()
+            } else {
+                location
+            };
+            let version: String = key.get_value("DisplayVersion").unwrap_or_default();
+            return Some(RegisteredInstall {
+                version: version.trim().to_string(),
+                install_location,
+                executable,
+            });
+        }
+    }
+    None
+}
+
+/// Log line for the end-to-end checks. Only written when LAKESIDE_E2E_LOG
+/// names a file; never carries a token, a code or a password.
+pub fn e2e_log(line: &str) {
+    let Ok(path) = std::env::var("LAKESIDE_E2E_LOG") else {
+        return;
+    };
+    if path.trim().is_empty() {
+        return;
+    }
+    use std::io::Write;
+    if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(path.trim()) {
+        let _ = writeln!(file, "{} {line}", now_millis());
+    }
+}
+
+/// The game binary to start: the launcher's own folder first, then (on
+/// Windows) wherever the game's own uninstall entry says it lives.
+fn resolve_game_binary(root: &Path, product_id: &str, executable: &str) -> Result<PathBuf, String> {
+    match safe_join(root, executable) {
+        Ok(binary) => Ok(binary),
+        Err(placed_error) => {
+            #[cfg(target_os = "windows")]
+            {
+                if let Some(found) = find_registered_install(product_id) {
+                    return Ok(found.executable);
+                }
+            }
+            let _ = product_id;
+            Err(placed_error)
+        }
+    }
+}
+
 #[cfg(target_os = "windows")]
 fn installed_executable(product_id: &str) -> Option<&'static str> {
     match product_id {
         // Tauri NSIS installs per-user into %LOCALAPPDATA%\AHDClient.
         "ahd" => Some("AHDClient/ahdclient-desktop.exe"),
-        "grand-century-desktop" => Some("GrandCentury/GrandCentury.exe"),
+        // Tauri NSIS, per user: %LOCALAPPDATA%\GrandCentury\grandcentury-desktop.exe.
+        "grand-century-desktop" => Some("GrandCentury/grandcentury-desktop.exe"),
         other => installer::windows_inno_executable(other),
     }
 }
@@ -361,11 +467,15 @@ async fn fetch_handoff_code(app: &AppHandle, client_id: &str) -> Option<String> 
         .send()
         .await
         .ok()?;
-    if !response.status().is_success() {
+    let status = response.status();
+    e2e_log(&format!("handoff client={client_id} status={}", status.as_u16()));
+    if !status.is_success() {
         return None;
     }
     let bytes = response.bytes().await.ok()?;
-    installer::parse_handoff_code(&bytes)
+    let code = installer::parse_handoff_code(&bytes);
+    e2e_log(&format!("handoff client={client_id} code_received={}", code.is_some()));
+    code
 }
 
 /// Launch an installed game. The path is resolved under the install root and
@@ -389,7 +499,7 @@ async fn launch_product(
     }
 
     let root = install_root(&app);
-    let binary = safe_join(&root, &executable)?;
+    let binary = resolve_game_binary(&root, &product_id, &executable)?;
     spawn_game(&app, &binary, handoff_client_id.as_deref()).await?;
     shell::record_played(&app, &product_id);
     Ok(())
@@ -432,7 +542,13 @@ async fn spawn_game(
 
     command
         .spawn()
-        .map(|_| ())
+        .map(|child| {
+            e2e_log(&format!(
+                "spawn pid={} file={}",
+                child.id(),
+                binary.file_name().and_then(|name| name.to_str()).unwrap_or("?")
+            ));
+        })
         .map_err(|error| format!("Could not start the game: {error}"))
 }
 
@@ -811,6 +927,8 @@ pub enum DownloadSource {
         base: String,
         commercial_id: String,
         token: String,
+        /// Accounts platform key, such as `windows-x86_64` or `linux-x86_64-deb`.
+        platform: String,
     },
 }
 
@@ -844,12 +962,8 @@ where
             base,
             commercial_id,
             token,
+            platform,
         } => {
-            let platform = installer::download_platform(
-                std::env::consts::OS,
-                std::env::consts::ARCH,
-            )
-            .ok_or_else(|| "This platform has no Lakeside download.".to_string())?;
             let endpoint = installer::account_download_url(base, commercial_id, platform)?;
             let endpoint_url = Url::parse(&endpoint)
                 .map_err(|_| "The download address is not valid.".to_string())?;
@@ -994,13 +1108,13 @@ where
         installer::InstallerKind::AppImage => installer::linux_appimage_relative(product_id)
             .ok_or_else(|| "Automatic installation is not configured for this product.".to_string())?
             .to_string(),
-        // A disk image is opened for the player; nothing is installed or tracked.
-        installer::InstallerKind::Dmg => String::new(),
+        // A disk image or a .deb is saved for the player; nothing is installed or tracked.
+        installer::InstallerKind::Dmg | installer::InstallerKind::Deb => String::new(),
     };
 
     // A disk image stays in Downloads so it is still there when the player
     // drags the app out of it. Everything else is a temporary file.
-    let directory = if parsed_kind == installer::InstallerKind::Dmg {
+    let directory = if parsed_kind.save_only() {
         downloads_dir()
     } else {
         std::env::temp_dir().join("lakeside-launcher-downloads")
@@ -1015,8 +1129,13 @@ where
     };
     if !actual.eq_ignore_ascii_case(sha256.trim()) {
         let _ = tokio::fs::remove_file(&destination).await;
+        e2e_log(&format!("checksum MISMATCH product={product_id}"));
         return Err("Download did not match the signed release manifest.".to_string());
     }
+    e2e_log(&format!(
+        "checksum ok product={product_id} kind={kind} sha256={}",
+        &actual[..12.min(actual.len())]
+    ));
 
     let action = installer::install_action(installed_version, version);
 
@@ -1075,9 +1194,15 @@ where
         installer::InstallerKind::AppImage => {
             place_appimage(&destination, &install_root, product_id).await
         }
-        installer::InstallerKind::Dmg => open_disk_image(&destination),
+        installer::InstallerKind::Dmg | installer::InstallerKind::Deb => {
+            show_in_folder(&destination)
+        }
     };
-    if parsed_kind == installer::InstallerKind::Dmg {
+    e2e_log(&format!(
+        "installer finished product={product_id} kind={kind} ok={}",
+        outcome.is_ok()
+    ));
+    if parsed_kind.save_only() {
         outcome?;
         return Ok(InstallResult {
             version: version.to_string(),
@@ -1088,7 +1213,7 @@ where
     let _ = tokio::fs::remove_file(&destination).await;
     outcome?;
 
-    safe_join(&install_root, &executable)
+    resolve_game_binary(&install_root, product_id, &executable)
         .map_err(|_| "The installer finished but the game executable was not found.".to_string())?;
 
     Ok(InstallResult {
@@ -1111,27 +1236,13 @@ fn downloads_dir() -> PathBuf {
         .unwrap_or_else(|| std::env::temp_dir().join("lakeside-launcher-downloads"))
 }
 
-/// Mount a verified disk image in Finder so the player can drag the app out.
-fn open_disk_image(image: &Path) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    {
-        std::process::Command::new("open")
-            .arg(image)
-            .status()
-            .map_err(|error| format!("Could not open the disk image: {error}"))
-            .and_then(|status| {
-                if status.success() {
-                    Ok(())
-                } else {
-                    Err("The disk image would not open.".to_string())
-                }
-            })
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = image;
-        Err("Disk images can only be opened on a Mac.".to_string())
-    }
+/// Open the folder that holds a saved download (a disk image or a .deb), with
+/// the file selected where the system supports it.
+fn show_in_folder(file: &Path) -> Result<(), String> {
+    let folder = file
+        .parent()
+        .ok_or_else(|| "The download has no folder.".to_string())?;
+    shell::open_in_file_manager(folder)
 }
 
 /// An AppImage launcher exports library paths for its own bundled libraries.
@@ -1202,6 +1313,10 @@ fn detect_installed_version(app: &AppHandle, product_id: &str) -> Option<String>
             }
         } else if recorded.is_none() && product_id == "ahd" {
             return windows_installed_version("AHDClient");
+        } else if recorded.is_none() && !installer::registry_display_names(product_id).is_empty() {
+            return find_registered_install(product_id)
+                .map(|found| found.version)
+                .filter(|version| !version.is_empty());
         }
     }
     recorded
@@ -1215,11 +1330,19 @@ fn installed_products(app: AppHandle) -> HashMap<String, InstalledProduct> {
 
     #[cfg(target_os = "windows")]
     {
-        for product_id in ["ahd", "corporate-warfare"] {
+        for product_id in ["ahd", "corporate-warfare", "grand-century-desktop"] {
             let Some(executable) = installed_executable(product_id) else {
                 continue;
             };
             if safe_join(&root, executable).is_err() {
+                // Not in the launcher's folder: an install the game registered itself.
+                if let Some(found) = find_registered_install(product_id) {
+                    state.entry(product_id.to_string()).or_insert(InstalledProduct {
+                        version: found.version,
+                        executable: executable.to_string(),
+                        installed_at: 0,
+                    });
+                }
                 continue;
             }
             if state.contains_key(product_id) && installer::inno_app_id(product_id).is_none() {
@@ -1329,16 +1452,21 @@ async fn install_release(
     file_name: String,
     kind: String,
     commercial_id: Option<String>,
+    package: Option<String>,
 ) -> Result<InstallResult, String> {
     let (source, version, sha256, file_name, kind) = match commercial_id {
         Some(commercial_id) => {
             let stored = read_session(&app)?
                 .ok_or_else(|| "Sign in to Lakeside to download this game.".to_string())?;
             // Paid builds: version, checksum, name and kind come from the
-            // accounts API, never from the webview.
-            let platform =
-                installer::download_platform(std::env::consts::OS, std::env::consts::ARCH)
-                    .ok_or_else(|| "This platform has no Lakeside download.".to_string())?;
+            // accounts API, never from the webview. `package` asks for a
+            // save-only file (the .deb) instead of this system's installer.
+            let platform = match package.as_deref() {
+                Some("deb") if std::env::consts::OS == "linux" => "linux-x86_64-deb",
+                Some(other) => return Err(format!("Unknown package kind {other}.")),
+                None => installer::download_platform(std::env::consts::OS, std::env::consts::ARCH)
+                    .ok_or_else(|| "This platform has no Lakeside download.".to_string())?,
+            };
             let release = fetch_account_release(&app, &commercial_id)
                 .await?
                 .ok_or_else(|| "This account does not have a download for this game.".to_string())?;
@@ -1352,6 +1480,7 @@ async fn install_release(
                     base: platform_base(),
                     commercial_id,
                     token: stored.token,
+                    platform: platform.to_string(),
                 },
                 release.version.clone(),
                 file.sha256.clone(),

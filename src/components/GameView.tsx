@@ -25,6 +25,7 @@ interface Props {
   onBack: () => void;
   onAction: () => void;
   onWeb: () => void;
+  onExtraDownload: () => void;
   onBuy: () => void;
   onOpenUrl: (url: string) => void;
   onOpenFolder: () => void;
@@ -52,6 +53,7 @@ export function GameView({
   onBack,
   onAction,
   onWeb,
+  onExtraDownload,
   onBuy,
   onOpenUrl,
   onOpenFolder,
@@ -110,6 +112,11 @@ export function GameView({
               >
                 {busy ? "Opening..." : row.action.label}
               </button>
+              {row.extraDownload ? (
+                <button type="button" className="btn s" onClick={onExtraDownload}>
+                  {row.extraDownload.label}
+                </button>
+              ) : null}
               {showWebSecondary ? (
                 <button type="button" className="btn s" onClick={onWeb}>
                   Play in browser

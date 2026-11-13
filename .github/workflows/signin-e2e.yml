@@ -6,9 +6,13 @@ on:
       version:
         description: Released launcher version to test
         default: '0.5.0'
+      bundle_run:
+        description: Optional desktop-bundles run id. When set, install the Windows build from that run instead of the published one
+        default: ''
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   signin:
@@ -32,11 +36,21 @@ jobs:
         shell: pwsh
         env:
           VERSION: ${{ inputs.version || '0.5.0' }}
+          BUNDLE_RUN: ${{ inputs.bundle_run }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           $ProgressPreference = 'SilentlyContinue'
-          $url = "https://lakesidegames.net/download/launcher/Lakeside_${env:VERSION}_x64-setup.exe"
           $file = Join-Path $env:RUNNER_TEMP 'Lakeside-setup.exe'
-          Invoke-WebRequest -Uri $url -OutFile $file
+          if ($env:BUNDLE_RUN) {
+            $dir = Join-Path $env:RUNNER_TEMP 'bundle'
+            gh run download $env:BUNDLE_RUN --repo $env:GITHUB_REPOSITORY -n lakeside-windows-x64 -D $dir
+            $setup = Get-ChildItem -Path $dir -Filter '*setup.exe' | Select-Object -First 1
+            if (-not $setup) { throw 'no setup.exe in the bundle run' }
+            Copy-Item $setup.FullName $file
+          } else {
+            $url = "https://lakesidegames.net/download/launcher/Lakeside_${env:VERSION}_x64-setup.exe"
+            Invoke-WebRequest -Uri $url -OutFile $file
+          }
           Start-Process -FilePath $file -ArgumentList '/S' -Wait
           Start-Sleep -Seconds 5
           $entry = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue |

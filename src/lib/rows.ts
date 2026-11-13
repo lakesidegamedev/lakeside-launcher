@@ -21,4 +21,6 @@ export interface GameRow {
   hasWeb: boolean;
   /** "Free until Monday 5:00 PM Eastern" while free access opens this game, else null. */
   freeText: string | null;
+  /** A second way to get the game on this system: a saved .deb ("Download .deb"). */
+  extraDownload?: { label: string } | null;
 }

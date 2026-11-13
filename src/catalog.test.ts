@@ -103,6 +103,12 @@ describe("every game has a way in", () => {
     expect(desktop.entitlementIds).toEqual([]);
     expect(libraryProducts({}).map((entry) => entry.id)).not.toContain("grand-century-desktop");
   });
+
+  it("starts the program the Grand Century setup really installs", () => {
+    const desktop = product("grand-century-desktop");
+    expect(executableFor(desktop, "windows")).toBe("GrandCentury/grandcentury-desktop.exe");
+    expect(executableFor(desktop, "linux")).toBe("GrandCentury/GrandCentury.AppImage");
+  });
 });
 
 describe("games start signed in", () => {

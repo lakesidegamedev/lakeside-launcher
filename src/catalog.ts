@@ -172,8 +172,8 @@ export const CATALOG: readonly Product[] = [
     installSizeMb: null,
   },
   {
-    // Installs from the manifest entry of the same id. Until a desktop release
-    // exists the row has no desktop build to offer and stays "Play in browser".
+    // Installs from the manifest entry of the same id (free, public GitHub
+    // release). The row shows Install or Play and always offers Play in browser.
     id: "grand-century-desktop",
     game: "grand-century",
     title: "Grand Century desktop app",
@@ -184,7 +184,12 @@ export const CATALOG: readonly Product[] = [
     liveId: null,
     webUrl: "https://lakesidegames.net/games/grand-century/",
     executables: {
-      windows: "GrandCentury/GrandCentury.exe",
+      // Per-user NSIS install into %LOCALAPPDATA%\GrandCentury. The launcher also
+      // finds an install through its uninstall entry (see registry_display_names
+      // in the shell), so this path is the fallback.
+      windows: "GrandCentury/grandcentury-desktop.exe",
+      // The release file is GrandCentury_<version>_amd64.AppImage; the launcher
+      // places it under this stable name.
       linux: "GrandCentury/GrandCentury.AppImage",
     },
     companionOf: "grand-century",
@@ -214,12 +219,17 @@ export function canLaunchDesktop(product: Product, entitlements: Entitlements): 
   return product.delivery === "native" && ownsProduct(product, entitlements);
 }
 
-/** Installer kinds the launcher can run, per platform. A Mac disk image is opened for the player. */
+/** Installer kinds the launcher can run, per platform. A Mac disk image is saved to Downloads and its folder opened. */
 export function installerSupported(kind: string, platform: Platform): boolean {
   if (platform === "windows") return kind === "nsis" || kind === "inno";
   if (platform === "linux") return kind === "appimage";
   if (platform === "macos") return kind === "dmg";
   return false;
+}
+
+/** Package kinds the launcher saves to Downloads and shows in a folder, never runs. */
+export function saveOnlyKind(kind: string): boolean {
+  return kind === "dmg" || kind === "deb";
 }
 
 export function executableFor(product: Product, platform: Platform): string | null {

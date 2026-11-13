@@ -627,14 +627,16 @@ export function App(): JSX.Element {
     })
       .then((result) => {
         if (result.action === "opened") {
-          // A Mac disk image was opened for the player to drag into Applications.
+          // A Mac disk image or a .deb was saved and its folder opened.
           setDownloads((previous) =>
             previous.map((item) =>
               item.id === startId ? { ...item, status: "done", finishedAt: Date.now() } : item,
             ),
           );
           setNotice(
-            `Opened the ${product.title} disk image. Drag the app into Applications, then right-click it and choose Open the first time.`,
+            platform === "macos"
+              ? `Saved the ${product.title} disk image to Downloads. Open it, drag the app into Applications, then right-click the app and choose Open the first time.`
+              : `Saved the ${product.title} package to Downloads.`,
           );
           return;
         }
@@ -665,6 +667,31 @@ export function App(): JSX.Element {
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startId]);
+
+  /** Save the .deb to Downloads and open the folder. No install is run. */
+  async function handleExtraDownload(product: Product): Promise<void> {
+    const release = releases[product.id];
+    const artifact = release?.artifacts["linux-deb"];
+    if (!release || !artifact?.sha256) {
+      setNotice("No verified package is published for this system yet.");
+      return;
+    }
+    try {
+      await installRelease({
+        productId: product.id,
+        version: release.version,
+        url: artifact.url,
+        sha256: artifact.sha256,
+        fileName: artifact.name,
+        kind: artifact.kind,
+        commercialId: product.authenticatedDownload ? (product.entitlementIds[0] ?? undefined) : undefined,
+        package: "deb",
+      });
+      setNotice(`Saved the ${product.title} package to Downloads.`);
+    } catch (error) {
+      setNotice(message(error));
+    }
+  }
 
   async function handleLaunch(product: Product): Promise<void> {
     if (product.registryApp) {
@@ -787,7 +814,11 @@ export function App(): JSX.Element {
       actionDisabled = true;
     } else if (desktop && macBrowserDownload(desktop) && action.kind === "install") {
       action = { kind: "install", label: "Download for Mac" };
+    } else if (desktop && platform === "macos" && action.kind === "install" && artifactFor(desktop)?.kind === "dmg") {
+      action = { kind: "install", label: "Download" };
     }
+    const debArtifact = desktop && platform === "linux" ? (releases[desktop.id]?.artifacts["linux-deb"] ?? null) : null;
+    const extraDownload = debArtifact?.sha256 && debArtifact.kind === "deb" ? { label: "Download .deb" } : null;
     const artifact = desktop ? artifactFor(desktop) : null;
     const detail = desktop ? details[desktop.id] : undefined;
     const sizeBytes =
@@ -813,6 +844,7 @@ export function App(): JSX.Element {
       owned,
       hasWeb,
       freeText: desktop && freeIds.has(desktop.id) ? freeText : null,
+      extraDownload,
     };
   }
 
@@ -953,6 +985,7 @@ export function App(): JSX.Element {
             onBack={() => setGameId(null)}
             onAction={() => runAction(selectedRow)}
             onWeb={() => void handleWeb(selectedRow.product)}
+            onExtraDownload={() => (selectedRow.desktop ? void handleExtraDownload(selectedRow.desktop) : undefined)}
             onBuy={() => handleBuy(selectedRow.product)}
             onOpenUrl={(url) => openUrl(url)}
             onOpenFolder={() =>

@@ -143,6 +143,8 @@ export interface InstallRequest {
   kind: string;
   /** Set for paid builds: the commercial product id for the accounts download. */
   commercialId?: string;
+  /** Save-only package instead of this system's installer: "deb". */
+  package?: string;
 }
 
 export async function isInstalled(executable: string): Promise<boolean> {
@@ -157,6 +159,7 @@ export async function installRelease(request: InstallRequest): Promise<InstallRe
   return invoke<InstallResult>("install_release", {
     ...request,
     commercialId: request.commercialId ?? null,
+    package: request.package ?? null,
   });
 }
 

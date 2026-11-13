@@ -110,6 +110,14 @@ fn location_for(app: &AppHandle, product_id: &str) -> Result<PathBuf, String> {
                     return Ok(location);
                 }
             }
+            #[cfg(target_os = "windows")]
+            {
+                if let Some(found) = crate::find_registered_install(product_id) {
+                    if found.install_location.is_dir() {
+                        return Ok(found.install_location);
+                    }
+                }
+            }
             Err(placed_error)
         }
     }
@@ -171,7 +179,7 @@ pub async fn install_details(app: AppHandle, product_id: String) -> Result<Insta
     })
 }
 
-fn open_in_file_manager(path: &Path) -> Result<(), String> {
+pub(crate) fn open_in_file_manager(path: &Path) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     let mut command = std::process::Command::new("explorer");
     #[cfg(target_os = "macos")]
@@ -277,6 +285,27 @@ fn windows_uninstall_entry(product_id: &str) -> Option<UninstallEntry> {
         return None;
     }
 
+    // Products with registered display names (Grand Century): any publisher.
+    if !installer::registry_display_names(product_id).is_empty() {
+        for hive in [HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE] {
+            let Ok(uninstall) = RegKey::predef(hive).open_subkey_with_flags(base, KEY_READ) else {
+                continue;
+            };
+            for name in uninstall.enum_keys().flatten() {
+                let Ok(key) = uninstall.open_subkey_with_flags(&name, KEY_READ) else {
+                    continue;
+                };
+                let display: String = key.get_value("DisplayName").unwrap_or_default();
+                if installer::display_name_matches(product_id, &display) {
+                    if let Some(entry) = read(&key) {
+                        return Some(entry);
+                    }
+                }
+            }
+        }
+        return None;
+    }
+
     // Everything else is found by its display name (and publisher for the
     // Lakeside desktop apps), in the same hives the launcher already reads.
     let (display_name, publisher): (&str, Option<&str>) = match product_id {
@@ -344,6 +373,7 @@ pub async fn uninstall_product(app: AppHandle, product_id: String) -> Result<(),
             }
             let args = manage::silent_uninstall_args(&program)
                 .ok_or_else(|| "That uninstaller is not one the launcher can run quietly.".to_string())?;
+            let program_path = program.clone();
             let status = tauri::async_runtime::spawn_blocking(move || {
                 std::process::Command::new(&program).args(&args).status()
             })
@@ -353,6 +383,20 @@ pub async fn uninstall_product(app: AppHandle, product_id: String) -> Result<(),
             if !status.success() {
                 return Err("The uninstaller reported a failure.".to_string());
             }
+            // Both Inno and NSIS uninstallers hand the work to a temporary copy and
+            // return at once; they delete the original last, so wait for that.
+            let waited = program_path.clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                for _ in 0..240 {
+                    if !waited.exists() {
+                        return;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                }
+            })
+            .await
+            .map_err(|error| format!("The uninstaller did not finish: {error}"))?;
+            crate::e2e_log(&format!("uninstall finished product={product_id}"));
             crate::forget_install(&app, &product_id)?;
             return Ok(());
         }
