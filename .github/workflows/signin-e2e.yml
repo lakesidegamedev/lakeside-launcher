@@ -79,10 +79,13 @@ jobs:
         run: |
           $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = '--remote-debugging-port=9222'
           Start-Process -FilePath $env:LAUNCHER_EXE -RedirectStandardOutput (Join-Path $env:RUNNER_TEMP 'launcher.out') -RedirectStandardError (Join-Path $env:RUNNER_TEMP 'launcher.err')
-          for ($i = 0; $i -lt 60; $i++) {
+          for ($i = 0; $i -lt 25; $i++) {
             try { Invoke-RestMethod -TimeoutSec 3 http://127.0.0.1:9222/json/version | Out-Null; 'launcher CDP up'; break } catch { Start-Sleep -Seconds 1 }
           }
           Get-Process | Where-Object { $_.Name -match 'lakeside|msedgewebview2' } | Select-Object Name, Id | Format-Table -AutoSize | Out-String
+          Get-CimInstance Win32_Process -Filter "Name='msedgewebview2.exe'" | Select-Object -First 2 -ExpandProperty CommandLine
+          netstat -ano | Select-String ':922'
+          Get-Content (Join-Path $env:RUNNER_TEMP 'launcher.err') -ErrorAction SilentlyContinue | Select-Object -First 20
 
       - name: Sign in end to end
         shell: pwsh
