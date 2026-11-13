@@ -78,6 +78,7 @@ pub fn inno_app_id(product_id: &str) -> Option<&'static str> {
 /// products found through the registry instead of a fixed path. Compared
 /// ignoring case and spaces; the values a real silent install writes are
 /// printed by the install check.
+#[allow(dead_code)]
 pub fn registry_display_names(product_id: &str) -> &'static [&'static str] {
     match product_id {
         "grand-century-desktop" => &["Grand Century", "GrandCentury"],
@@ -86,6 +87,7 @@ pub fn registry_display_names(product_id: &str) -> &'static [&'static str] {
 }
 
 /// Program file name inside the install folder, for registry-found products.
+#[allow(dead_code)]
 pub fn registry_executable_name(product_id: &str) -> Option<&'static str> {
     match product_id {
         "grand-century-desktop" => Some("grandcentury-desktop.exe"),
@@ -94,6 +96,7 @@ pub fn registry_executable_name(product_id: &str) -> Option<&'static str> {
 }
 
 /// Whether an uninstall `DisplayName` is one of the product's registered names.
+#[allow(dead_code)]
 pub fn display_name_matches(product_id: &str, display: &str) -> bool {
     let squash = |text: &str| -> String {
         text.chars()
