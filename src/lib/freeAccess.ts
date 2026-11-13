@@ -51,6 +51,7 @@ export function freeGrantedIds(
   if (!freeAccessActive(access, now)) return granted;
   for (const product of products) {
     if (product.entitlementIds.length === 0) continue;
+    if (product.staffOnly) continue;
     if (product.entitlementIds.some((id) => entitlements[id] === "owned")) continue;
     granted.add(product.id);
   }

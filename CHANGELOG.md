@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.2
+
+- Groundwork for an internal preview. Nothing changes for players: no new game, tile or page appears, and free access works as before.
+
 ## 0.7.1
 
 - Grand Century installs and starts. The launcher looked for the wrong program

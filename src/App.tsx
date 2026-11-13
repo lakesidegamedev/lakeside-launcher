@@ -6,6 +6,7 @@ import {
   executableFor,
   installerSupported,
   libraryProducts,
+  visibleProducts,
   type Entitlements,
   type Platform,
   type Product,
@@ -135,6 +136,8 @@ export function App(): JSX.Element {
   const freeText = freeUntilText(freeNow);
   const freeIds = freeGrantedIds(freeNow, serverEntitlements);
   const entitlements = withFreeAccess(freeNow, serverEntitlements);
+  // Staff-only previews appear only for an account that really holds the grant.
+  const catalogProducts = useMemo(() => visibleProducts(serverEntitlements), [serverEntitlements]);
 
   // Session and purchases.
   useEffect(() => {
@@ -270,7 +273,7 @@ export function App(): JSX.Element {
   useEffect(() => {
     if (!isDesktop()) return;
     let cancelled = false;
-    const paid = CATALOG.filter((product) => product.authenticatedDownload && product.entitlementIds[0]);
+    const paid = catalogProducts.filter((product) => product.authenticatedDownload && product.entitlementIds[0]);
     if (!signedInUser) {
       setReleaseChecked({});
       setReleases((previous) => {
@@ -297,7 +300,7 @@ export function App(): JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, [signedInUser]);
+  }, [signedInUser, catalogProducts]);
 
   useEffect(() => {
     if (!isDesktop() || platform !== "windows") return;
@@ -868,7 +871,7 @@ export function App(): JSX.Element {
     }
   }
 
-  const allRows = CATALOG.filter((product) => !product.companionOf).map(rowFor);
+  const allRows = catalogProducts.filter((product) => !product.companionOf).map(rowFor);
   function runSlideAction(action: { type: ActionType; target: string }): void {
     if (action.type === "store" || action.type === "news") {
       openUrl(`https://lakesidegames.net${action.target}`);
@@ -955,7 +958,7 @@ export function App(): JSX.Element {
             continueList={continuePlaying(rows, installed, details)}
             recent={recentlyUpdated(
               notes,
-              Object.fromEntries(CATALOG.map((product) => [product.id, product.companionOf ? (PRODUCTS_BY_ID.get(product.companionOf)?.title ?? product.title) : product.title])),
+              Object.fromEntries(catalogProducts.map((product) => [product.id, product.companionOf ? (PRODUCTS_BY_ID.get(product.companionOf)?.title ?? product.title) : product.title])),
               5,
             )}
             account={session ? accountSummary(session.username, catalog, serverEntitlements, freeText) : null}
@@ -1026,7 +1029,7 @@ export function App(): JSX.Element {
             entitlements={entitlements}
             freeIds={freeIds}
             freeText={freeText}
-            products={CATALOG.filter((product) => !product.companionOf)}
+            products={catalogProducts.filter((product) => !product.companionOf)}
             signedIn={session !== null}
             onBuy={handleBuy}
             onOpenUrl={(url) => openUrl(url)}

@@ -8,6 +8,7 @@ import {
   installerSupported,
   libraryProducts,
   ownsProduct,
+  visibleProducts,
   type Entitlements,
 } from "./catalog";
 
@@ -162,5 +163,38 @@ describe("platform helpers", () => {
     expect(installerSupported("dmg", "linux")).toBe(false);
     expect(installerSupported("appimage", "macos")).toBe(false);
     expect(installerSupported("msi", "windows")).toBe(false);
+  });
+});
+
+describe("Urban Sprawl staff-only preview", () => {
+  const staff: Entitlements = { "urban-sprawl": "owned" };
+
+  it("is wired like a paid native game with a handoff", () => {
+    const entry = product("urban-sprawl");
+    expect(entry.staffOnly).toBe(true);
+    expect(entry.entitlementIds).toEqual(["urban-sprawl"]);
+    expect(entry.handoffClientId).toBe("urban-sprawl-desktop");
+    expect(entry.authenticatedDownload).toBe(true);
+    expect(executableFor(entry, "windows")).toBe("Programs/Urban Sprawl/urban-sprawl.exe");
+    expect(entry.liveId).toBeNull();
+  });
+
+  it("leaves no trace without the grant: signed out, owning other games, or refunded", () => {
+    for (const ents of [{}, owned, { "corporate-warfare": "owned" }, { "urban-sprawl": "refunded" }] as Entitlements[]) {
+      expect(visibleProducts(ents).map((entry) => entry.id)).not.toContain("urban-sprawl");
+      expect(libraryProducts(ents).map((entry) => entry.id)).not.toContain("urban-sprawl");
+    }
+  });
+
+  it("shows for an account that holds the grant", () => {
+    expect(visibleProducts(staff).map((entry) => entry.id)).toContain("urban-sprawl");
+    expect(libraryProducts(staff).map((entry) => entry.id)).toContain("urban-sprawl");
+    expect(canLaunchDesktop(product("urban-sprawl"), staff)).toBe(true);
+  });
+
+  it("never offers Buy: no live product id and no store page of its own", () => {
+    const entry = product("urban-sprawl");
+    expect(entry.liveId).toBeNull();
+    expect(entry.storeUrl).not.toContain("/store/");
   });
 });

@@ -9,6 +9,7 @@ use std::path::{Component, Path, PathBuf};
 pub const PRODUCT_IDS: &[&str] = &[
     "ahd",
     "corporate-warfare",
+    "urban-sprawl",
     "margin-of-victory",
     "grand-century-desktop",
 ];
@@ -24,8 +25,10 @@ pub fn product_dir_relative(product_id: &str, os: &str) -> Option<&'static str> 
     match (os, product_id) {
         ("windows", "ahd") => Some("AHDClient"),
         ("windows", "corporate-warfare") => Some("Programs/Corporate Warfare"),
+        ("windows", "urban-sprawl") => Some("Programs/Urban Sprawl"),
         ("windows", "grand-century-desktop") => Some("GrandCentury"),
         ("linux", "corporate-warfare") => Some("CorporateWarfare"),
+        ("linux", "urban-sprawl") => Some("UrbanSprawl"),
         ("linux", "grand-century-desktop") => Some("GrandCentury"),
         _ => None,
     }
@@ -244,6 +247,9 @@ mod tests {
     #[test]
     fn only_catalog_products_are_known() {
         assert!(known_product("corporate-warfare"));
+        assert!(known_product("urban-sprawl"));
+        assert_eq!(product_dir_relative("urban-sprawl", "windows"), Some("Programs/Urban Sprawl"));
+        assert_eq!(product_dir_relative("urban-sprawl", "linux"), Some("UrbanSprawl"));
         assert!(!known_product("../etc"));
         assert!(!known_product(""));
         assert!(!known_product("electioneer"));

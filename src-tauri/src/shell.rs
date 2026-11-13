@@ -282,7 +282,10 @@ fn windows_uninstall_entry(product_id: &str) -> Option<UninstallEntry> {
                 }
             }
         }
-        return None;
+        // Products that also register a display name fall through to that lookup.
+        if installer::registry_display_names(product_id).is_empty() {
+            return None;
+        }
     }
 
     // Products with registered display names (Grand Century): any publisher.
