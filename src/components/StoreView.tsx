@@ -17,6 +17,9 @@ interface Props {
   /** False when this is the bundled copy because the live one could not be read. */
   live: boolean;
   entitlements: Entitlements;
+  /** Paid products open only because free access is on, and the "Free until ..." wording. */
+  freeIds?: ReadonlySet<string>;
+  freeText?: string | null;
   products: readonly Product[];
   signedIn: boolean;
   onBuy: (product: Product) => void;
@@ -37,6 +40,8 @@ export function StoreView({
   catalog,
   live,
   entitlements,
+  freeIds,
+  freeText,
   products,
   signedIn,
   onBuy,
@@ -86,6 +91,8 @@ export function StoreView({
         </div>
       ) : null}
 
+      {freeText ? <div className="note" style={{ marginBottom: 8 }}>{freeText}: install and play every paid game, no purchase needed.</div> : null}
+
       <h2>Games</h2>
       <table>
         <tbody>
@@ -111,7 +118,9 @@ export function StoreView({
                   <b>{priceSummary(product, catalog, entitlements)}</b>
                 </td>
                 <td>
-                  {owned === "owned" ? (
+                  {freeIds?.has(product.id) && freeText ? (
+                    <span className="owned">{freeText}</span>
+                  ) : owned === "owned" ? (
                     <span className="owned">Owned</span>
                   ) : owned === "free" ? (
                     <span className="tag">Free</span>

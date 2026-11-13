@@ -66,6 +66,14 @@ import { StatusBar } from "./components/StatusBar";
 import { HomeView } from "./components/HomeView";
 import type { HomeFeed, SlideAction } from "./components/home/slides";
 import { loadFreeAccess, loadHomeFeed } from "./lib/homeFeed";
+import {
+  FREE_ACCESS_OFF,
+  freeAccessActive,
+  freeGrantedIds,
+  freeUntilText,
+  withFreeAccess,
+  type FreeAccess,
+} from "./lib/freeAccess";
 import { SLIDE_GAME_TO_ROW, continuePlaying, playerState, recentlyUpdated } from "./lib/home";
 
 const GUEST_KEY = "lakeside.launcher.guest";
@@ -90,7 +98,7 @@ export function App(): JSX.Element {
   const platform = useMemo(detectPlatform, []);
 
   const [session, setSession] = useState<Session | null>(null);
-  const [entitlements, setEntitlements] = useState<Entitlements>({});
+  const [serverEntitlements, setEntitlements] = useState<Entitlements>({});
   const [view, setView] = useState<View>("home");
   const [gameId, setGameId] = useState<string | null>(null);
   const [guest, setGuest] = useState(() => {
@@ -122,7 +130,12 @@ export function App(): JSX.Element {
   const [details, setDetails] = useState<Record<string, InstallDetails>>({});
   const [installRoot, setInstallRoot] = useState<string | null>(null);
   const [homeFeed, setHomeFeed] = useState<HomeFeed | null>(null);
-  const [freeAccess, setFreeAccess] = useState(false);
+  const [freeAccess, setFreeAccess] = useState<FreeAccess>(FREE_ACCESS_OFF);
+  // Free weekend: while the studio switch is on, signed-in players can install and play paid games.
+  const freeNow = session ? freeAccess : FREE_ACCESS_OFF;
+  const freeText = freeUntilText(freeNow);
+  const freeIds = freeGrantedIds(freeNow, serverEntitlements);
+  const entitlements = withFreeAccess(freeNow, serverEntitlements);
 
   // Session and purchases.
   useEffect(() => {
@@ -781,6 +794,7 @@ export function App(): JSX.Element {
       updateAvailable,
       owned,
       hasWeb,
+      freeText: desktop && freeIds.has(desktop.id) ? freeText : null,
     };
   }
 
@@ -890,7 +904,7 @@ export function App(): JSX.Element {
         ) : view === "home" ? (
           <HomeView
             feed={homeFeed}
-            freeAccess={freeAccess}
+            freeAccess={freeAccessActive(freeAccess)}
             player={playerState(rows)}
             artFor={artForSlide}
             onSlideAction={runSlideAction}
@@ -957,6 +971,8 @@ export function App(): JSX.Element {
             catalog={catalog}
             live={catalogResult?.live ?? false}
             entitlements={entitlements}
+            freeIds={freeIds}
+            freeText={freeText}
             products={CATALOG.filter((product) => !product.companionOf)}
             signedIn={session !== null}
             onBuy={handleBuy}

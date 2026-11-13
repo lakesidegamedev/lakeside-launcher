@@ -410,8 +410,9 @@ pub async fn fetch_home_feed() -> Result<home::HomeFeed, String> {
 
 /// Whether the studio free-access switch is on. The entitlements service reads
 /// the same switch, so this agrees with what a signed-in player is granted.
+/// Returns `{on, endsAt}`.
 #[tauri::command]
-pub async fn free_access_status() -> Result<bool, String> {
+pub async fn free_access_status() -> Result<serde_json::Value, String> {
     let client = reqwest::Client::builder()
         .user_agent("lakeside-launcher")
         .timeout(Duration::from_secs(8))
@@ -424,11 +425,13 @@ pub async fn free_access_status() -> Result<bool, String> {
         .await
         .map_err(|error| format!("Could not reach the site: {error}"))?;
     if !response.status().is_success() {
-        return Ok(false);
+        return Ok(serde_json::json!({ "on": false }));
     }
     let body: serde_json::Value = response
         .json()
         .await
         .map_err(|error| format!("The free access answer was malformed: {error}"))?;
-    Ok(body.get("on").and_then(serde_json::Value::as_bool).unwrap_or(false))
+    let on = body.get("on").and_then(serde_json::Value::as_bool).unwrap_or(false);
+    let ends_at = body.get("endsAt").and_then(serde_json::Value::as_str).filter(|text| text.len() <= 40);
+    Ok(serde_json::json!({ "on": on, "endsAt": ends_at }))
 }

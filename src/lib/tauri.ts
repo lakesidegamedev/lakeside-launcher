@@ -1,6 +1,8 @@
 // Thin wrapper over Tauri commands. Every call degrades to a clear error in a
 // plain browser, so the Vite build stays inspectable without the desktop shell.
 
+import { FREE_ACCESS_OFF, parseFreeAccess, type FreeAccess } from "./freeAccess";
+
 export function isDesktop(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
@@ -272,11 +274,10 @@ export async function fetchHomeFeed(): Promise<import("../components/home/slides
   return (await response.json()) as import("../components/home/slides").HomeFeed;
 }
 
-/** Whether the studio free-access switch is on (the public switch the entitlements read). */
-export async function fetchFreeAccess(): Promise<boolean> {
-  if (isDesktop()) return invoke<boolean>("free_access_status");
+/** The studio free-access switch (the public answer the entitlements read), with its end time. */
+export async function fetchFreeAccess(): Promise<FreeAccess> {
+  if (isDesktop()) return parseFreeAccess(await invoke<unknown>("free_access_status"));
   const response = await fetch("https://lakesidegames.net/account/api/free-access");
-  if (!response.ok) return false;
-  const body = (await response.json()) as { on?: unknown };
-  return body.on === true;
+  if (!response.ok) return FREE_ACCESS_OFF;
+  return parseFreeAccess(await response.json());
 }

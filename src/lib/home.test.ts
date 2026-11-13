@@ -20,6 +20,7 @@ function row(id: string, o: Partial<GameRow> = {}): GameRow {
     updateAvailable: false,
     owned: true,
     hasWeb: false,
+    freeText: null,
     ...o,
   };
 }

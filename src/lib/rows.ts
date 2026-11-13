@@ -19,4 +19,6 @@ export interface GameRow {
   updateAvailable: boolean;
   owned: boolean;
   hasWeb: boolean;
+  /** "Free until Monday 5:00 PM Eastern" while free access opens this game, else null. */
+  freeText: string | null;
 }

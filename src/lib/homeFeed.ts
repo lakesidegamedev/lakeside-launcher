@@ -3,6 +3,7 @@
 
 import type { HomeFeed } from "../components/home/slides";
 import { fetchHomeFeed, fetchFreeAccess } from "./tauri";
+import { FREE_ACCESS_OFF, type FreeAccess } from "./freeAccess";
 
 export const FALLBACK_FEED: HomeFeed = {
   version: 1,
@@ -65,11 +66,11 @@ export async function loadHomeFeed(): Promise<HomeFeedResult> {
   return { feed: FALLBACK_FEED, live: false };
 }
 
-/** True while the studio free-access switch is on. Any failure means off. */
-export async function loadFreeAccess(): Promise<boolean> {
+/** The studio free-access switch and its end time. Any failure means off. */
+export async function loadFreeAccess(): Promise<FreeAccess> {
   try {
     return await fetchFreeAccess();
   } catch {
-    return false;
+    return FREE_ACCESS_OFF;
   }
 }

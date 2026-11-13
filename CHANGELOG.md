@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.1
+
+- Free weekend: while the studio free-access switch is on, signed-in players see
+  "Free until Monday 5:00 PM Eastern" (read from the end time the site gives) in
+  the Library, on the game page and in the Store. Paid games show Install or
+  Play instead of Buy. When the switch is off, nothing about it shows.
+- Home: "Recently updated" shows a sentence from the release notes, not a heading.
+- Tier wording: the sample Home slide now says Corporate Warfare is included with
+  Supporter+, not any tier.
+
 ## 0.6.0
 
 - New look: tabs across the top (Home, Library, Store, Downloads) and an account
