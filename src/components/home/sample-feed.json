@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "generated": "2026-11-13T05:00:00Z",
+  "slides": [
+    {
+      "id": "cw-2-0-release",
+      "kind": "release",
+      "game": "cw",
+      "headline": "Corporate Warfare 2.0 is out",
+      "line": "$14.99, or included with any supporter tier.",
+      "art": "https://lakesidegames.net/store/assets/cw-goods.jpg",
+      "action": { "type": "store", "target": "/store/corporate-warfare" },
+      "starts": "2026-11-13T00:00:00Z",
+      "ends": "2026-12-13T00:00:00Z",
+      "priority": 10
+    },
+    {
+      "id": "free-access-2026-11",
+      "kind": "free",
+      "game": "ahd",
+      "headline": "Everything is free to play while A House Divided is paused",
+      "line": "A House Divided is paused before its 2027 world opens.",
+      "art": "https://lakesidegames.net/store/assets/ahd-map.webp",
+      "action": { "type": "store", "target": "/store" },
+      "starts": "2026-11-13T00:00:00Z",
+      "ends": "2026-12-13T00:00:00Z",
+      "priority": 30
+    },
+    {
+      "id": "gc-early-access",
+      "kind": "news",
+      "game": "gc",
+      "headline": "Grand Century is in early access",
+      "line": "Play it in the browser now. The desktop version is in progress.",
+      "art": "https://lakesidegames.net/store/assets/gc-world.webp",
+      "action": { "type": "play", "target": "gc" },
+      "starts": "2026-11-13T00:00:00Z",
+      "ends": "2026-12-13T00:00:00Z",
+      "priority": 50
+    }
+  ]
+}
