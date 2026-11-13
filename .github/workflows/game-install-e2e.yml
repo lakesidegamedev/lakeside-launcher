@@ -18,13 +18,6 @@ on:
       games:
         description: Games to check on Windows (comma separated)
         default: 'corporate-warfare,grand-century'
-  push:
-    branches: ['release/0.7.1']
-    paths:
-      - 'e2e/install.mjs'
-      - 'e2e/token.mjs'
-      - '.github/workflows/game-install-e2e.yml'
-      - 'src-tauri/examples/game_install_probe.rs'
 
 permissions:
   contents: read
