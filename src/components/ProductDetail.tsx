@@ -16,6 +16,12 @@ interface Props {
   installing: boolean;
   installFraction: number | null;
   canInstall: boolean;
+  /** Entitled paid product with nothing published for this system yet. */
+  comingTonight: boolean;
+  /** Label the app computed for the main action. */
+  primaryLabel: string;
+  signedIn: boolean;
+  onSignIn: () => void;
   busy: boolean;
   onClose: () => void;
   onLaunch: () => void;
@@ -33,6 +39,10 @@ export function ProductDetail({
   installing,
   installFraction,
   canInstall,
+  comingTonight,
+  primaryLabel,
+  signedIn,
+  onSignIn,
   busy,
   onClose,
   onLaunch,
@@ -117,6 +127,10 @@ export function ProductDetail({
               <button type="button" className="btn primary" onClick={onWeb}>
                 {product.webLabel ?? "Play in browser"}
               </button>
+            ) : launchable && comingTonight ? (
+              <button type="button" className="btn primary" disabled>
+                {primaryLabel}
+              </button>
             ) : launchable ? (
               <>
                 {!installedVersion && canInstall ? (
@@ -130,7 +144,9 @@ export function ProductDetail({
                       ? installFraction === null
                         ? "Downloading..."
                         : `Installing ${Math.round(installFraction * 100)}%`
-                      : `Install${release ? ` ${release.version}` : ""}`}
+                      : primaryLabel.startsWith("Download for")
+                        ? primaryLabel
+                        : `Install${release ? ` ${release.version}` : ""}`}
                   </button>
                 ) : installedVersion && updateAvailable && canInstall ? (
                   <button
@@ -147,7 +163,7 @@ export function ProductDetail({
                   </button>
                 ) : (
                   <button type="button" className="btn primary" onClick={onLaunch} disabled={busy}>
-                    {busy ? "Opening..." : "Launch desktop"}
+                    {busy ? "Opening..." : product.authenticatedDownload ? "Play" : "Launch desktop"}
                   </button>
                 )}
                 {installedVersion && updateAvailable && canInstall ? (
@@ -173,8 +189,17 @@ export function ProductDetail({
               </>
             ) : (
               <>
+                {product.authenticatedDownload && !signedIn ? (
+                  <button type="button" className="btn primary" onClick={onSignIn}>
+                    Sign in to install
+                  </button>
+                ) : null}
                 {product.priceCents !== null && product.productId ? (
-                  <button type="button" className="btn primary" onClick={onBuy}>
+                  <button
+                    type="button"
+                    className={product.authenticatedDownload && !signedIn ? "btn ghost" : "btn primary"}
+                    onClick={onBuy}
+                  >
                     Buy for {formatPrice(product.priceCents, product.currency)}
                   </button>
                 ) : null}

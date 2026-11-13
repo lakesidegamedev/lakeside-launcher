@@ -102,6 +102,14 @@ export async function getReleaseManifest(): Promise<ReleaseManifest> {
   return invoke<ReleaseManifest>("get_release_manifest");
 }
 
+/**
+ * Release details for a paid product, read by the launcher backend with the
+ * stored session. Null when nothing is published or the player is signed out.
+ */
+export async function getAccountRelease(commercialId: string): Promise<ReleaseProduct | null> {
+  return invoke<ReleaseProduct | null>("account_release", { commercialId });
+}
+
 export interface InstallProgress {
   productId: string;
   downloaded: number;

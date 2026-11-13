@@ -120,6 +120,16 @@ describe("native delivery metadata", () => {
     expect(cw?.executables?.linux).toMatch(/\.AppImage$/);
   });
 
+  it("prices Corporate Warfare at $14.99 and sends Buy to its store page", () => {
+    const cw = CATALOG.find((product) => product.id === "corporate-warfare")!;
+    expect(cw.priceCents).toBe(1499);
+    expect(cw.storeUrl).toBe("https://lakesidegames.net/store/corporate-warfare");
+    expect(ownsProduct(cw, {})).toBe(false);
+    expect(ownsProduct(cw, { "corporate-warfare": "owned" })).toBe(true);
+    expect(storeProducts({}).some((product) => product.id === cw.id)).toBe(true);
+    expect(storeProducts({ "corporate-warfare": "owned" }).some((product) => product.id === cw.id)).toBe(false);
+  });
+
   it("supports the right installer kinds per platform", async () => {
     const { installerSupported } = await import("./catalog");
     expect(installerSupported("nsis", "windows")).toBe(true);

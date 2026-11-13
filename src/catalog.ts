@@ -49,6 +49,13 @@ export interface Product {
    * and, when signed in, a single-use code bound to this client id.
    */
   handoffClientId?: string;
+  /** Store page the Buy button opens, instead of the generic checkout. */
+  storeUrl?: string;
+  /**
+   * Account page for a browser download on platforms the launcher cannot
+   * install on (macOS until there is a Mac launcher build).
+   */
+  browserDownloadUrl?: string;
   /**
    * Native app found through its own Windows uninstall entry (publisher
    * "Lakeside Games") rather than the launcher install root. The tile only
@@ -138,11 +145,11 @@ export const CATALOG: readonly Product[] = [
     title: "Corporate Warfare",
     tagline: "Own the economy instead of the country",
     description:
-      "A corporate strategy simulation for Windows and Linux, with the source published on GitHub.",
+      "A corporate strategy simulation for Windows and Linux, with the source published on GitHub. The Mac build downloads from your account page.",
     delivery: "native",
     status: "available",
-    platforms: ["windows", "linux"],
-    priceCents: null,
+    platforms: ["windows", "linux", "macos"],
+    priceCents: 1499,
     currency: "usd",
     productId: "corporate-warfare",
     webUrl: null,
@@ -153,6 +160,8 @@ export const CATALOG: readonly Product[] = [
     },
     authenticatedDownload: true,
     handoffClientId: "corporate-warfare-desktop",
+    storeUrl: "https://lakesidegames.net/store/corporate-warfare",
+    browserDownloadUrl: "https://lakesidegames.net/account",
     accent: "#7a6a3a",
     mark: "CW",
     art: corporateWarfareArt,

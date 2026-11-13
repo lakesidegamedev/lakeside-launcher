@@ -36,7 +36,13 @@ export function StoreView({
             selected={selectedId === product.id}
             busy={false}
             actionLabel={
-              product.status === "soon" ? "Coming soon" : signedIn ? "Buy" : "Sign in to buy"
+              product.status === "soon"
+                ? "Coming soon"
+                : signedIn
+                  ? "Buy"
+                  : product.authenticatedDownload
+                    ? "Sign in to install"
+                    : "Sign in to buy"
             }
             onSelect={() => onSelect(product)}
             onAction={() => (signedIn ? onBuy(product) : onSignIn())}

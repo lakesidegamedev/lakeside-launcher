@@ -16,10 +16,10 @@ entitlements, and one-click AHDClient install/update on Windows.
 | --- | --- |
 | ![Store](docs/screenshots/store.png) | ![Account](docs/screenshots/account.png) |
 
-## Download (Windows, 0.4.0)
+## Download (Windows, 0.5.0)
 
-- Installer: [Lakeside_0.4.0_x64-setup.exe](https://github.com/lakesidegamedev/lakeside-launcher/releases/download/v0.4.0/Lakeside_0.4.0_x64-setup.exe)
-- Portable: [Lakeside.exe](https://github.com/lakesidegamedev/lakeside-launcher/releases/download/v0.4.0/Lakeside.exe)
+- Installer: [Lakeside_0.5.0_x64-setup.exe](https://github.com/lakesidegamedev/lakeside-launcher/releases/download/v0.5.0/Lakeside_0.5.0_x64-setup.exe)
+- Portable: [Lakeside.exe](https://github.com/lakesidegamedev/lakeside-launcher/releases/download/v0.5.0/Lakeside.exe)
 
 The build is currently unsigned, so SmartScreen warns once. The release
 workflow signs and timestamps both binaries automatically as soon as the
@@ -230,7 +230,7 @@ service exists, a price or product id change must be made in both places, and
 `src/catalog.test.ts` guards the local invariants (unique ids, https web URLs,
 per-platform executables).
 
-## Installs, paid downloads and game handoff (0.5 groundwork)
+## Installs, paid downloads and game handoff
 
 - Manifest artifacts carry `kind` (`nsis`, `inno`, `appimage`, `dmg`) and a
   mandatory `sha256`. Nothing runs before the hash matches the signed manifest.
@@ -248,3 +248,13 @@ per-platform executables).
 - Catalog products with `handoffClientId` start with `LAKESIDE_LAUNCHER=1`,
   `LAKESIDE_LAUNCHER_VERSION` and, when signed in, a single-use
   `LAKESIDE_HANDOFF_CODE` (5 second timeout, never logged or stored).
+- Release details for a paid product (`GET /account/api/downloads/<productId>`)
+  are read by the launcher backend with the stored session. The version,
+  checksum, file name and installer kind for the install come from that
+  answer, never from the webview. A 403, 404 or failed checksum removes any
+  partial file before anything runs.
+- Corporate Warfare ($14.99): Install, Update and Play for accounts that own it
+  (including supporter tiers, as reported by the entitlements endpoint), Buy
+  for everyone else (opens the store page), "Sign in to install" when signed
+  out, and "Coming tonight" until a build is published. On a Mac the tile sends
+  the player to the account page for a browser download.

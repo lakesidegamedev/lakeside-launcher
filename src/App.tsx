@@ -22,6 +22,7 @@ import {
   openExternal,
   openWebGame,
   getReleaseManifest,
+  getAccountRelease,
   installRelease,
   installedProducts,
   onInstallProgress,
@@ -76,6 +77,9 @@ export function App(): JSX.Element {
   const [installed, setInstalled] = useState<Record<string, InstalledProduct>>({});
   const [installing, setInstalling] = useState<string | null>(null);
   const [installFraction, setInstallFraction] = useState<number | null>(null);
+  // Paid products whose release lookup finished, so "Coming tonight" only
+  // shows once the accounts service actually said nothing is published.
+  const [releaseChecked, setReleaseChecked] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -120,7 +124,21 @@ export function App(): JSX.Element {
     let cancelled = false;
     void getReleaseManifest()
       .then((manifest) => {
-        if (!cancelled) setReleases(manifest.products);
+        if (cancelled) return;
+        // Paid builds are described by the accounts service, never by the
+        // public manifest.
+        const publicProducts = { ...manifest.products };
+        for (const product of CATALOG) {
+          if (product.authenticatedDownload) delete publicProducts[product.id];
+        }
+        setReleases((previous) => {
+          const paid: Record<string, ReleaseProduct> = {};
+          for (const product of CATALOG) {
+            const existing = previous[product.id];
+            if (product.authenticatedDownload && existing) paid[product.id] = existing;
+          }
+          return { ...publicProducts, ...paid };
+        });
       })
       .catch(() => {
         // The library still works without release metadata.
@@ -144,6 +162,39 @@ export function App(): JSX.Element {
       cancelled = true;
     };
   }, []);
+
+  const signedInUser = session?.username ?? null;
+  useEffect(() => {
+    if (!isDesktop()) return;
+    let cancelled = false;
+    const paid = CATALOG.filter((product) => product.authenticatedDownload && product.productId);
+    if (!signedInUser) {
+      setReleaseChecked({});
+      setReleases((previous) => {
+        const next = { ...previous };
+        for (const product of paid) delete next[product.id];
+        return next;
+      });
+      return;
+    }
+    for (const product of paid) {
+      void getAccountRelease(product.productId as string)
+        .catch(() => null)
+        .then((release) => {
+          if (cancelled) return;
+          setReleases((previous) => {
+            const next = { ...previous };
+            if (release) next[product.id] = release;
+            else delete next[product.id];
+            return next;
+          });
+          setReleaseChecked((previous) => ({ ...previous, [product.id]: true }));
+        });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [signedInUser]);
 
   useEffect(() => {
     if (!isDesktop() || detectPlatform() !== "windows") return;
@@ -259,8 +310,28 @@ export function App(): JSX.Element {
     return key ? (release.artifacts[key] ?? null) : null;
   }
 
+  /** Paid build on a Mac: the launcher cannot install it, so send the player to the account page. */
+  function macBrowserDownload(product: Product): boolean {
+    return (
+      detectPlatform() === "macos" &&
+      !!product.browserDownloadUrl &&
+      canLaunchDesktop(product, entitlements)
+    );
+  }
+
+  /** Entitled paid product with nothing to install yet. */
+  function comingTonight(product: Product): boolean {
+    return (
+      !!product.authenticatedDownload &&
+      canLaunchDesktop(product, entitlements) &&
+      !installed[product.id] &&
+      !canInstall(product)
+    );
+  }
+
   function canInstall(product: Product): boolean {
     if (!isDesktop() || product.delivery !== "native") return false;
+    if (macBrowserDownload(product)) return true;
     const artifact = artifactFor(product);
     // Registry-detected apps are installed by their own setup, opened from the download link.
     if (product.registryApp) return artifact !== null && detectPlatform() === "windows";
@@ -281,6 +352,15 @@ export function App(): JSX.Element {
   async function handleInstall(product: Product): Promise<void> {
     const release = releases[product.id];
     const artifact = artifactFor(product);
+    if (macBrowserDownload(product) && product.browserDownloadUrl) {
+      try {
+        await openExternal(product.browserDownloadUrl);
+        setNotice(`Your ${product.title} download is on your account page.`);
+      } catch (error) {
+        setNotice(message(error));
+      }
+      return;
+    }
     if (product.registryApp) {
       if (!artifact) return;
       try {
@@ -378,7 +458,9 @@ export function App(): JSX.Element {
 
   function handleBuy(product: Product): void {
     if (!product.productId) return;
-    const url = `https://lakesidegames.net/account/checkout?product=${encodeURIComponent(product.productId)}`;
+    const url =
+      product.storeUrl ??
+      `https://lakesidegames.net/account/checkout?product=${encodeURIComponent(product.productId)}`;
     if (isDesktop()) {
       void openExternal(url).then(
         () => setNotice("Checkout opened in your browser. Refresh purchases when you are done."),
@@ -396,7 +478,9 @@ export function App(): JSX.Element {
     }
     if (product.delivery === "native") {
       if (canLaunchDesktop(product, entitlements)) {
-        if (!installed[product.id] && canInstall(product)) {
+        if (comingTonight(product)) {
+          setNotice(`${product.title} is not published for this system yet.`);
+        } else if (!installed[product.id] && canInstall(product)) {
           void handleInstall(product);
         } else if (installed[product.id] && hasUpdate(product) && canInstall(product)) {
           void handleInstall(product);
@@ -405,6 +489,8 @@ export function App(): JSX.Element {
         }
       } else if (product.webUrl) {
         void handleWeb(product);
+      } else if (product.authenticatedDownload && !session) {
+        void handleSignIn("discord");
       } else if (product.priceCents !== null) {
         handleBuy(product);
       }
@@ -421,7 +507,12 @@ export function App(): JSX.Element {
           : `Installing ${Math.round(installFraction * 100)}%`;
       }
       if (installed[product.id]) {
-        return hasUpdate(product) ? `Update to ${latestVersion(product)}` : "Launch desktop";
+        if (hasUpdate(product) && canInstall(product)) return `Update to ${latestVersion(product)}`;
+        return product.authenticatedDownload ? "Play" : "Launch desktop";
+      }
+      if (macBrowserDownload(product)) return "Download for Mac";
+      if (comingTonight(product)) {
+        return releaseChecked[product.id] ? "Coming tonight" : "Checking...";
       }
       if (canInstall(product)) {
         const version = latestVersion(product);
@@ -430,6 +521,7 @@ export function App(): JSX.Element {
       return "Launch desktop";
     }
     if (product.webUrl) return "Play online";
+    if (product.authenticatedDownload && !session) return "Sign in to install";
     if (product.priceCents !== null) return "Buy";
     return "Unavailable";
   }
@@ -559,6 +651,10 @@ export function App(): JSX.Element {
           installing={installing === selected.id}
           installFraction={installFraction}
           canInstall={canInstall(selected)}
+          comingTonight={comingTonight(selected)}
+          primaryLabel={primaryLabel(selected)}
+          signedIn={session !== null}
+          onSignIn={() => void handleSignIn("discord")}
           busy={busy === selected.id}
           onClose={() => setSelected(null)}
           onLaunch={() => void handleLaunch(selected)}

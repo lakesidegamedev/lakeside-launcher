@@ -5,7 +5,7 @@ on:
     inputs:
       version:
         description: Released launcher version to test
-        default: '0.4.1'
+        default: '0.5.0'
 
 permissions:
   contents: read
@@ -13,7 +13,7 @@ permissions:
 jobs:
   signin:
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
@@ -31,7 +31,7 @@ jobs:
       - name: Install the released launcher
         shell: pwsh
         env:
-          VERSION: ${{ inputs.version || '0.4.1' }}
+          VERSION: ${{ inputs.version || '0.5.0' }}
         run: |
           $ProgressPreference = 'SilentlyContinue'
           $url = "https://lakesidegames.net/download/launcher/Lakeside_${env:VERSION}_x64-setup.exe"
@@ -57,7 +57,7 @@ jobs:
           $profileDir = Join-Path $env:RUNNER_TEMP 'edge-profile'
           $progId = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice' -ErrorAction SilentlyContinue).ProgId
           "default https ProgId: $progId"
-          # The launcher opens URLs with `cmd /C start`, which runs the default
+          # The launcher opens URLs through the Windows URL handler, which runs the default
           # browser command. Point that command at Edge with the same flags and
           # profile as the running instance so the URL lands as a new tab there.
           $cmd = "`"$edge`" --remote-debugging-port=9223 --user-data-dir=`"$profileDir`" --no-first-run --single-argument %1"
@@ -72,6 +72,7 @@ jobs:
 
       - name: Start Edge and the launcher, then sign in end to end
         shell: pwsh
+        timeout-minutes: 12
         env:
           LAKESIDE_TEST_USERNAME: ${{ secrets.LAKESIDE_TEST_USERNAME }}
           LAKESIDE_TEST_PASSWORD: ${{ secrets.LAKESIDE_TEST_PASSWORD }}
@@ -109,4 +110,4 @@ jobs:
         with:
           name: signin-e2e-shots
           path: e2e-shots
-          if-no-files-found: ignore
+          if-no-files-found: warn
