@@ -80,12 +80,18 @@ export interface RecentUpdate {
 
 /** First sentence of release notes, markdown noise removed, capped for one line. */
 export function firstSentence(body: string, max = 110): string {
-  const plain = body
+  const lines = body
     .replace(/\r/g, "")
     .split("\n")
-    .map((line) => line.replace(/^[#>*\-\s]+/, "").replace(/[*_`]/g, "").trim())
-    .find((line) => line.length > 0 && !/^what'?s changed$/i.test(line));
-  if (!plain) return "";
+    .map((raw) => ({
+      heading: /^\s*#/.test(raw),
+      text: raw.replace(/^[#>*\-\s]+/, "").replace(/[*_`]/g, "").trim(),
+    }))
+    .filter((line) => line.text.length > 0 && !/^what'?s changed$/i.test(line.text));
+  // A heading only stands in when the notes have nothing else to say.
+  const picked = lines.find((line) => !line.heading) ?? lines[0];
+  if (!picked) return "";
+  const plain = picked.text;
   const stop = plain.search(/[.!?](\s|$)/);
   const sentence = stop >= 0 ? plain.slice(0, stop + 1) : plain;
   return sentence.length > max ? `${sentence.slice(0, max - 1).trimEnd()}…` : sentence;

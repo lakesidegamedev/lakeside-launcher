@@ -61,6 +61,12 @@ describe("recently updated", () => {
     expect(out.map((entry) => entry.id)).toEqual(["mov", "ahd", "gc"]);
     expect(out[1]?.summary).toBe("Every sale has a buyer.");
   });
+  it("prefers a real sentence over a heading", () => {
+    expect(firstSentence("### Phones and tablets\n\nThe app now fits small screens. More text.")).toBe(
+      "The app now fits small screens.",
+    );
+    expect(firstSentence("### Phones and tablets")).toBe("Phones and tablets");
+  });
   it("shortens one long sentence", () => {
     expect(firstSentence("x".repeat(300)).length).toBeLessThanOrEqual(110);
   });
