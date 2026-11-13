@@ -15,6 +15,7 @@ async function invoke<T>(command: string, args?: Record<string, unknown>): Promi
 
 export interface SignInStart {
   returnUrl: string;
+  port: number;
   state: string;
 }
 
@@ -37,8 +38,40 @@ export async function openWebGame(productId: string, url: string, title: string)
   await invoke<void>("open_web_game", { productId, url, title });
 }
 
-export async function launchProduct(productId: string, executable: string): Promise<void> {
-  await invoke<void>("launch_product", { productId, executable });
+export async function launchProduct(
+  productId: string,
+  executable: string,
+  handoffClientId?: string,
+): Promise<void> {
+  await invoke<void>("launch_product", {
+    productId,
+    executable,
+    handoffClientId: handoffClientId ?? null,
+  });
+}
+
+export interface DesktopApp {
+  version: string;
+  installLocation: string;
+}
+
+/** Windows app detected from its own uninstall registry entry, or null. */
+export async function detectDesktopApp(productId: string): Promise<DesktopApp | null> {
+  try {
+    return await invoke<DesktopApp | null>("detect_desktop_app", { productId });
+  } catch {
+    return null;
+  }
+}
+
+export async function launchDesktopApp(
+  productId: string,
+  handoffClientId?: string,
+): Promise<void> {
+  await invoke<void>("launch_desktop_app", {
+    productId,
+    handoffClientId: handoffClientId ?? null,
+  });
 }
 
 export interface ReleaseArtifact {
@@ -78,6 +111,7 @@ export interface InstallProgress {
 export interface InstallResult {
   version: string;
   executable: string;
+  action: "install" | "update" | "reinstall";
 }
 
 export interface InstalledProduct {
@@ -97,6 +131,8 @@ export interface InstallRequest {
   sha256: string;
   fileName: string;
   kind: string;
+  /** Set for paid builds: the commercial product id for the accounts download. */
+  commercialId?: string;
 }
 
 export async function isInstalled(executable: string): Promise<boolean> {
@@ -108,7 +144,10 @@ export async function isInstalled(executable: string): Promise<boolean> {
 }
 
 export async function installRelease(request: InstallRequest): Promise<InstallResult> {
-  return invoke<InstallResult>("install_release", { ...request });
+  return invoke<InstallResult>("install_release", {
+    ...request,
+    commercialId: request.commercialId ?? null,
+  });
 }
 
 export async function onInstallProgress(

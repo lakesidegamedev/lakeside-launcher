@@ -1,6 +1,7 @@
 import markUrl from "../assets/lakeside-mark.svg";
 import type { Session } from "../platform/client";
 import type { View } from "../App";
+import type { SignInProvider } from "../lib/signin";
 
 interface Props {
   view: View;
@@ -9,13 +10,13 @@ interface Props {
   libraryCount: number;
   storeCount: number;
   mode: "demo" | "live";
-  onSignIn: () => void;
+  onSignIn: (provider: SignInProvider) => void;
 }
 
-const ITEMS: readonly { id: View; label: string; hint: string }[] = [
-  { id: "library", label: "Library", hint: "Games you own" },
-  { id: "store", label: "Store", hint: "Games and packs" },
-  { id: "account", label: "Account", hint: "Purchases and devices" },
+const ITEMS: readonly { id: View; label: string }[] = [
+  { id: "library", label: "Library" },
+  { id: "store", label: "Store" },
+  { id: "account", label: "Settings" },
 ];
 
 export function Sidebar({
@@ -36,11 +37,8 @@ export function Sidebar({
   return (
     <aside className="sidebar">
       <div className="brand">
-        <img src={markUrl} alt="" width={34} height={34} />
-        <div>
-          <strong>Lakeside</strong>
-          <span>Games launcher</span>
-        </div>
+        <img src={markUrl} alt="" width={22} height={22} />
+        <strong>Lakeside</strong>
       </div>
 
       <nav className="nav" aria-label="Sections">
@@ -54,7 +52,6 @@ export function Sidebar({
           >
             <span className="nav-label">{item.label}</span>
             {counts[item.id] !== null ? <span className="nav-count">{counts[item.id]}</span> : null}
-            <small>{item.hint}</small>
           </button>
         ))}
       </nav>
@@ -71,15 +68,16 @@ export function Sidebar({
             </span>
           </button>
         ) : (
-          <button type="button" className="btn primary wide" onClick={onSignIn}>
-            Sign in
-          </button>
+          <>
+            <button type="button" className="btn primary wide" onClick={() => onSignIn("discord")}>
+              Sign in with Discord
+            </button>
+            <button type="button" className="btn wide" onClick={() => onSignIn("ahd")}>
+              Sign in with A House Divided
+            </button>
+          </>
         )}
-        <p className="mode-note">
-          {mode === "demo"
-            ? "Demo data. Purchases and sessions are local only."
-            : "Connected to the Lakeside platform."}
-        </p>
+        <p className="mode-note">{mode === "demo" ? "Demo data, local only" : "Connected"}</p>
       </div>
     </aside>
   );

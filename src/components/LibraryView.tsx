@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Entitlements, Product } from "../catalog";
-import { GameCard } from "./GameCard";
+import { GameCard, type ChipTone } from "./GameCard";
 
 interface Props {
   products: readonly Product[];
@@ -8,6 +8,8 @@ interface Props {
   busy: string | null;
   signedIn: boolean;
   primaryLabel: (product: Product) => string;
+  chipFor: (product: Product) => { label: string; tone: ChipTone };
+  selectedId: string | null;
   onSelect: (product: Product) => void;
   onPrimary: (product: Product) => void;
   onWeb: (product: Product) => void;
@@ -21,6 +23,8 @@ export function LibraryView({
   busy,
   signedIn,
   primaryLabel,
+  chipFor,
+  selectedId,
   onSelect,
   onPrimary,
   onWeb,
@@ -37,38 +41,9 @@ export function LibraryView({
           product.game.toLowerCase().includes(needle),
       )
     : products;
-  const featured = products.find((product) => product.id === "ahd") ?? products[0];
 
   return (
     <section className="view">
-      {featured && !needle ? (
-        <article
-          className="feature"
-          style={{ ["--card-accent" as string]: featured.accent }}
-        >
-          {featured.art ? <img className="feature-art" src={featured.art} alt="" /> : null}
-          <div className="feature-copy">
-            <p className="eyebrow">Featured</p>
-            <h2>{featured.title}</h2>
-            <p className="feature-tagline">{featured.tagline}</p>
-            <div className="feature-actions">
-              <button
-                type="button"
-                className="btn primary"
-                onClick={() =>
-                  featured.delivery === "web" ? onWeb(featured) : onPrimary(featured)
-                }
-              >
-                {primaryLabel(featured)}
-              </button>
-              <button type="button" className="btn ghost" onClick={() => onSelect(featured)}>
-                Details
-              </button>
-            </div>
-          </div>
-        </article>
-      ) : null}
-
       <div className="view-tools">
         <label className="search">
           <span className="sr-only">Search library</span>
@@ -114,6 +89,9 @@ export function LibraryView({
               key={product.id}
               product={product}
               entitlements={entitlements}
+              mode="library"
+              chip={chipFor(product)}
+              selected={selectedId === product.id}
               busy={busy === product.id}
               actionLabel={primaryLabel(product)}
               onSelect={() => onSelect(product)}

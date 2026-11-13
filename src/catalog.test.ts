@@ -35,7 +35,7 @@ describe("catalog integrity", () => {
 
   it("gives every native product a windows and linux executable", () => {
     for (const product of CATALOG) {
-      if (product.delivery === "native") {
+      if (product.delivery === "native" && !product.registryApp) {
         expect(product.executables?.windows, product.id).toBeTruthy();
         expect(product.executables?.linux, product.id).toBeTruthy();
       }
@@ -69,6 +69,15 @@ describe("ownership", () => {
     expect(ids).toContain("grand-century");
   });
 
+  it("keeps the Margin of Victory web tile and adds a registry-detected desktop entry", () => {
+    const web = CATALOG.find((product) => product.id === "electioneer")!;
+    const desktop = CATALOG.find((product) => product.id === "margin-of-victory")!;
+    expect(web.delivery).toBe("web");
+    expect(desktop.registryApp).toBe(true);
+    expect(desktop.handoffClientId).toBe("margin-of-victory");
+    expect(desktop.platforms).toEqual(["windows"]);
+  });
+
   it("lists unowned priced products in the store", () => {
     const ids = storeProducts({}).map((product) => product.id);
     expect(ids).toContain("ahd");
@@ -93,5 +102,30 @@ describe("platform helpers", () => {
   it("formats cents as dollars", () => {
     expect(formatPrice(2000, "usd")).toBe("$20.00");
     expect(formatPrice(499, "usd")).toBe("$4.99");
+  });
+});
+
+describe("native delivery metadata", () => {
+  it("keeps AHD on the public manifest URL with no handoff", () => {
+    const ahd = CATALOG.find((product) => product.id === "ahd");
+    expect(ahd?.authenticatedDownload).toBeUndefined();
+    expect(ahd?.handoffClientId).toBeUndefined();
+  });
+
+  it("opts Corporate Warfare into paid downloads and the handoff", () => {
+    const cw = CATALOG.find((product) => product.id === "corporate-warfare");
+    expect(cw?.productId).toBe("corporate-warfare");
+    expect(cw?.authenticatedDownload).toBe(true);
+    expect(cw?.handoffClientId).toBe("corporate-warfare-desktop");
+    expect(cw?.executables?.linux).toMatch(/\.AppImage$/);
+  });
+
+  it("supports the right installer kinds per platform", async () => {
+    const { installerSupported } = await import("./catalog");
+    expect(installerSupported("nsis", "windows")).toBe(true);
+    expect(installerSupported("inno", "windows")).toBe(true);
+    expect(installerSupported("appimage", "linux")).toBe(true);
+    expect(installerSupported("appimage", "windows")).toBe(false);
+    expect(installerSupported("dmg", "macos")).toBe(false);
   });
 });

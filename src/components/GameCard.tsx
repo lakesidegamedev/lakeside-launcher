@@ -1,9 +1,14 @@
 import { formatPrice, ownsProduct, type Entitlements, type Product } from "../catalog";
 
+export type ChipTone = "ok" | "warn" | "muted" | "info";
+
 interface Props {
   product: Product;
   entitlements: Entitlements;
   actionLabel: string;
+  chip: { label: string; tone: ChipTone };
+  mode: "library" | "store";
+  selected: boolean;
   busy: boolean;
   onSelect: () => void;
   onAction: () => void;
@@ -13,17 +18,21 @@ export function GameCard({
   product,
   entitlements,
   actionLabel,
+  chip,
+  mode,
+  selected,
   busy,
   onSelect,
   onAction,
 }: Props): JSX.Element {
   const owned = ownsProduct(product, entitlements);
   const disabled = product.status === "soon" || busy;
+  const price =
+    product.priceCents === null ? "Free" : formatPrice(product.priceCents, product.currency);
 
   return (
     <article
-      className="game-card"
-      style={{ ["--card-accent" as string]: product.accent }}
+      className={selected ? "game-card is-selected" : "game-card"}
       onClick={onSelect}
     >
       <div className="game-art">
@@ -32,33 +41,28 @@ export function GameCard({
         ) : (
           <span className="game-mark">{product.mark}</span>
         )}
-        <span className={owned ? "badge owned" : "badge"}>
-          {product.status === "soon"
-            ? "Coming soon"
-            : owned
-              ? "In library"
-              : product.priceCents !== null
-                ? formatPrice(product.priceCents, product.currency)
-                : "Free"}
-        </span>
       </div>
       <div className="game-body">
-        <h3>{product.title}</h3>
-        <p>{product.tagline}</p>
-        <div className="game-foot">
-          <span className="platforms">{product.platforms.slice(0, 3).join(" · ")}</span>
-          <button
-            type="button"
-            className="btn small"
-            disabled={disabled}
-            onClick={(event) => {
-              event.stopPropagation();
-              onAction();
-            }}
-          >
-            {busy ? "Opening..." : actionLabel}
-          </button>
+        <div className="game-head">
+          <h3>{product.title}</h3>
+          {mode === "store" ? (
+            <span className="price">{owned ? "Owned" : price}</span>
+          ) : (
+            <span className={`chip ${chip.tone}`}>{chip.label}</span>
+          )}
         </div>
+        <p>{product.tagline}</p>
+        <button
+          type="button"
+          className="btn primary wide"
+          disabled={disabled}
+          onClick={(event) => {
+            event.stopPropagation();
+            onAction();
+          }}
+        >
+          {busy ? "Opening..." : actionLabel}
+        </button>
       </div>
     </article>
   );

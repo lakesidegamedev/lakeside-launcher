@@ -9,6 +9,8 @@
 //   root and rejected if it escapes.
 // - External URLs and game URLs must be https on Lakeside-owned hosts.
 
+mod installer;
+
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::TcpListener;
@@ -20,10 +22,8 @@ use ed25519_dalek::{Signature, VerifyingKey};
 use rand::distributions::Alphanumeric;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-#[cfg(target_os = "windows")]
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
-#[cfg(target_os = "windows")]
 use tokio::io::AsyncWriteExt;
 use url::Url;
 
@@ -35,9 +35,14 @@ const GAME_HOSTS: &[&str] = &["lakesidegames.net", "ahousedividedgame.com"];
 
 /// Hosts allowed for release artifact downloads. The signed manifest is
 /// authoritative, but this keeps a compromised manifest from pointing at an
-/// arbitrary origin (and HTTPS is required by validate_url).
-#[cfg(target_os = "windows")]
-const DOWNLOAD_HOSTS: &[&str] = &["github.com", "githubusercontent.com", "lakesidegames.net"];
+/// arbitrary origin (and HTTPS is required by validate_url). The R2 host is the
+/// presigned target of the accounts download redirect for paid builds.
+const DOWNLOAD_HOSTS: &[&str] = &[
+    "github.com",
+    "githubusercontent.com",
+    "lakesidegames.net",
+    "r2.cloudflarestorage.com",
+];
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -52,6 +57,8 @@ struct InstallProgress {
 pub struct InstallResult {
     pub version: String,
     pub executable: String,
+    /// "install", "update" or "reinstall".
+    pub action: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -152,12 +159,33 @@ pub fn windows_installed_version(display_name: &str) -> Option<String> {
     None
 }
 
+/// Read DisplayVersion for an Inno Setup product from its AppId uninstall key
+/// (per-user first, then all-users).
+#[cfg(target_os = "windows")]
+pub fn windows_inno_installed_version(product_id: &str) -> Option<String> {
+    use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ};
+    use winreg::RegKey;
+
+    let subkey = installer::inno_uninstall_subkey(installer::inno_app_id(product_id)?);
+    for hive in [HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE] {
+        let Ok(key) = RegKey::predef(hive).open_subkey_with_flags(&subkey, KEY_READ) else {
+            continue;
+        };
+        if let Ok(version) = key.get_value::<String, _>("DisplayVersion") {
+            if !version.trim().is_empty() {
+                return Some(version);
+            }
+        }
+    }
+    None
+}
+
 #[cfg(target_os = "windows")]
 fn installed_executable(product_id: &str) -> Option<&'static str> {
     match product_id {
         // Tauri NSIS installs per-user into %LOCALAPPDATA%\AHDClient.
         "ahd" => Some("AHDClient/ahdclient-desktop.exe"),
-        _ => None,
+        other => installer::windows_inno_executable(other),
     }
 }
 
@@ -199,6 +227,7 @@ pub struct ReleaseManifest {
 #[serde(rename_all = "camelCase")]
 struct SignInStart {
     return_url: String,
+    port: u16,
     state: String,
 }
 
@@ -291,32 +320,82 @@ fn query_param(target: &str, key: &str) -> Option<String> {
     None
 }
 
+/// Ask lakeside-accounts for a single-use handoff code bound to the game's
+/// client id. Any failure, including a 5 second timeout, returns None so the
+/// game still launches. The code is never logged or stored.
+async fn fetch_handoff_code(app: &AppHandle, client_id: &str) -> Option<String> {
+    let stored = read_session(app).ok().flatten()?;
+    let client = reqwest::Client::builder()
+        .user_agent("lakeside-launcher")
+        .timeout(Duration::from_secs(5))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .ok()?;
+    let response = client
+        .post(format!("{}/account/launcher/handoff", platform_base()))
+        .bearer_auth(&stored.token)
+        .json(&serde_json::json!({ "clientId": client_id }))
+        .send()
+        .await
+        .ok()?;
+    if !response.status().is_success() {
+        return None;
+    }
+    let bytes = response.bytes().await.ok()?;
+    installer::parse_handoff_code(&bytes)
+}
+
 /// Launch an installed game. The path is resolved under the install root and
 /// must name a real file; the process is detached so closing the launcher does
-/// not kill the game.
+/// not kill the game. Games that opt in (`handoff_client_id`) get the launcher
+/// environment and, when signed in, a handoff code.
 #[tauri::command]
-fn launch_product(app: AppHandle, product_id: String, executable: String) -> Result<(), String> {
-    if product_id.is_empty()
-        || product_id.len() > 64
-        || !product_id
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '-')
-    {
+async fn launch_product(
+    app: AppHandle,
+    product_id: String,
+    executable: String,
+    handoff_client_id: Option<String>,
+) -> Result<(), String> {
+    if !installer::valid_id(&product_id) {
         return Err("Invalid product id.".to_string());
+    }
+    if let Some(client_id) = handoff_client_id.as_deref() {
+        if !installer::valid_id(client_id) {
+            return Err("Invalid handoff client id.".to_string());
+        }
     }
 
     let root = install_root(&app);
     let binary = safe_join(&root, &executable)?;
+    spawn_game(&app, &binary, handoff_client_id.as_deref()).await
+}
+
+/// Start a game binary detached from the launcher. Games that opt in
+/// (`handoff_client_id`) get the launcher environment and, when signed in, a
+/// handoff code.
+async fn spawn_game(
+    app: &AppHandle,
+    binary: &Path,
+    handoff_client_id: Option<&str>,
+) -> Result<(), String> {
     let working_dir = binary
         .parent()
         .ok_or_else(|| "The game executable has no parent directory.".to_string())?
         .to_path_buf();
 
-    let mut command = std::process::Command::new(&binary);
+    let mut command = std::process::Command::new(binary);
     command.current_dir(working_dir);
     command.stdin(std::process::Stdio::null());
     command.stdout(std::process::Stdio::null());
     command.stderr(std::process::Stdio::null());
+
+    if let Some(client_id) = handoff_client_id {
+        let code = fetch_handoff_code(app, client_id).await;
+        command.env_remove("LAKESIDE_HANDOFF_CODE");
+        for (key, value) in installer::launch_env(env!("CARGO_PKG_VERSION"), code.as_deref()) {
+            command.env(key, value);
+        }
+    }
 
     #[cfg(windows)]
     {
@@ -328,6 +407,111 @@ fn launch_product(app: AppHandle, product_id: String, executable: String) -> Res
         .spawn()
         .map(|_| ())
         .map_err(|error| format!("Could not start the game: {error}"))
+}
+
+/// A Lakeside desktop app found through its own Windows uninstall entry.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopApp {
+    pub version: String,
+    pub install_location: String,
+    #[serde(skip)]
+    pub executable: PathBuf,
+}
+
+/// Find an installed Lakeside desktop app by display name and publisher in the
+/// uninstall registry (per-user first, then all-users).
+#[cfg(target_os = "windows")]
+fn find_desktop_app(product_id: &str) -> Option<DesktopApp> {
+    use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ};
+    use winreg::RegKey;
+
+    let display_name = installer::desktop_app_display_name(product_id)?;
+    let paths = [
+        (HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Uninstall"),
+        (HKEY_LOCAL_MACHINE, r"Software\Microsoft\Windows\CurrentVersion\Uninstall"),
+        (
+            HKEY_LOCAL_MACHINE,
+            r"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
+        ),
+    ];
+    for (hive, path) in paths {
+        let Ok(uninstall) = RegKey::predef(hive).open_subkey_with_flags(path, KEY_READ) else {
+            continue;
+        };
+        for name in uninstall.enum_keys().flatten() {
+            let Ok(key) = uninstall.open_subkey_with_flags(&name, KEY_READ) else {
+                continue;
+            };
+            let display: String = key.get_value("DisplayName").unwrap_or_default();
+            let publisher: String = key.get_value("Publisher").unwrap_or_default();
+            if display.trim() != display_name || publisher.trim() != installer::DESKTOP_APP_PUBLISHER {
+                continue;
+            }
+            let version: String = key.get_value("DisplayVersion").unwrap_or_default();
+            let location: String = key
+                .get_value::<String, _>("InstallLocation")
+                .unwrap_or_default()
+                .trim()
+                .trim_matches('"')
+                .to_string();
+            let icon: Option<String> = key
+                .get_value::<String, _>("DisplayIcon")
+                .ok()
+                .and_then(|value| installer::exe_from_display_icon(&value));
+            let executable = match icon {
+                Some(path) => PathBuf::from(path),
+                None if !location.is_empty() => Path::new(&location).join(format!("{display_name}.exe")),
+                None => continue,
+            };
+            if !executable.is_file() {
+                continue;
+            }
+            let install_location = if location.is_empty() {
+                executable
+                    .parent()
+                    .map(|dir| dir.to_string_lossy().to_string())
+                    .unwrap_or_default()
+            } else {
+                location
+            };
+            return Some(DesktopApp {
+                version: version.trim().to_string(),
+                install_location,
+                executable,
+            });
+        }
+    }
+    None
+}
+
+#[cfg(not(target_os = "windows"))]
+fn find_desktop_app(_product_id: &str) -> Option<DesktopApp> {
+    None
+}
+
+/// Installed desktop app info (version and folder) for the product, if any.
+#[tauri::command]
+fn detect_desktop_app(product_id: String) -> Option<DesktopApp> {
+    find_desktop_app(&product_id)
+}
+
+/// Launch a registry-detected desktop app. The path is re-read from the
+/// registry here, never taken from the UI.
+#[tauri::command]
+async fn launch_desktop_app(
+    app: AppHandle,
+    product_id: String,
+    handoff_client_id: Option<String>,
+) -> Result<(), String> {
+    if let Some(client_id) = handoff_client_id.as_deref() {
+        if !installer::valid_id(client_id) {
+            return Err("Invalid handoff client id.".to_string());
+        }
+    }
+    let found = find_desktop_app(&product_id)
+        .ok_or_else(|| "That app is not installed on this computer.".to_string())?;
+    spawn_game(&app, &found.executable, handoff_client_id.as_deref()).await
 }
 
 /// Open a game inside a dedicated window with no launcher capabilities. Reuses
@@ -501,6 +685,7 @@ fn begin_sign_in(app: AppHandle) -> Result<SignInStart, String> {
 
     Ok(SignInStart {
         return_url: format!("http://127.0.0.1:{port}/callback?state={state}"),
+        port,
         state,
     })
 }
@@ -580,124 +765,338 @@ fn is_installed(app: AppHandle, executable: String) -> bool {
     safe_join(&install_root(&app), &executable).is_ok()
 }
 
+/// Where the installer bytes come from.
+pub enum DownloadSource {
+    /// A manifest URL on an allowlisted public host (free products).
+    Url(String),
+    /// The accounts download endpoint: authenticated with the stored session,
+    /// answered with a 302 to a short-lived storage URL.
+    Account {
+        base: String,
+        commercial_id: String,
+        token: String,
+    },
+}
+
+async fn download_to_file<F>(
+    source: &DownloadSource,
+    destination: &Path,
+    on_progress: &F,
+) -> Result<String, String>
+where
+    F: Fn(u64, Option<u64>) + Send,
+{
+    let mut response = match source {
+        DownloadSource::Url(url) => {
+            let parsed = validate_url(url, DOWNLOAD_HOSTS)?;
+            let client = reqwest::Client::builder()
+                .user_agent("lakeside-launcher")
+                .timeout(Duration::from_secs(900))
+                .build()
+                .map_err(|error| format!("Could not build the download client: {error}"))?;
+            let response = client
+                .get(parsed)
+                .send()
+                .await
+                .map_err(|error| format!("Could not download the game: {error}"))?
+                .error_for_status()
+                .map_err(|error| format!("Game download returned {error}"))?;
+            validate_url(response.url().as_str(), DOWNLOAD_HOSTS)?;
+            response
+        }
+        DownloadSource::Account {
+            base,
+            commercial_id,
+            token,
+        } => {
+            let platform = installer::download_platform(
+                std::env::consts::OS,
+                std::env::consts::ARCH,
+            )
+            .ok_or_else(|| "This platform has no Lakeside download.".to_string())?;
+            let endpoint = installer::account_download_url(base, commercial_id, platform)?;
+            let endpoint_url = Url::parse(&endpoint)
+                .map_err(|_| "The download address is not valid.".to_string())?;
+
+            // No automatic redirects: the bearer token goes to the accounts
+            // host only, and the storage URL is fetched without it.
+            let client = reqwest::Client::builder()
+                .user_agent("lakeside-launcher")
+                .timeout(Duration::from_secs(900))
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .map_err(|error| format!("Could not build the download client: {error}"))?;
+            let first = client
+                .get(endpoint_url.clone())
+                .bearer_auth(token)
+                .send()
+                .await
+                .map_err(|error| format!("Could not reach the Lakeside platform: {error}"))?;
+            match first.status() {
+                status if status.is_redirection() => {}
+                reqwest::StatusCode::UNAUTHORIZED => {
+                    return Err("Sign in to Lakeside to download this game.".to_string())
+                }
+                reqwest::StatusCode::FORBIDDEN | reqwest::StatusCode::NOT_FOUND => {
+                    return Err("This account does not have a download for this game.".to_string())
+                }
+                status => return Err(format!("The Lakeside platform returned {status}.")),
+            }
+            let location = first
+                .headers()
+                .get(reqwest::header::LOCATION)
+                .and_then(|value| value.to_str().ok())
+                .ok_or_else(|| "The download redirect had no address.".to_string())?
+                .to_string();
+            let target =
+                installer::resolve_redirect(&endpoint_url, &location, DOWNLOAD_HOSTS, validate_url)?;
+            client
+                .get(target)
+                .send()
+                .await
+                .map_err(|error| format!("Could not download the game: {error}"))?
+                .error_for_status()
+                .map_err(|error| format!("Game download returned {error}"))?
+        }
+    };
+
+    let total = response.content_length();
+    if let Some(parent) = destination.parent() {
+        tokio::fs::create_dir_all(parent)
+            .await
+            .map_err(|error| format!("Could not create the download directory: {error}"))?;
+    }
+    let mut file = tokio::fs::File::create(destination)
+        .await
+        .map_err(|error| format!("Could not write the download: {error}"))?;
+
+    let mut hasher = Sha256::new();
+    let mut downloaded: u64 = 0;
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|error| format!("Game download stopped: {error}"))?
+    {
+        file.write_all(&chunk)
+            .await
+            .map_err(|error| format!("Could not write the download: {error}"))?;
+        hasher.update(&chunk);
+        downloaded += chunk.len() as u64;
+        on_progress(downloaded, total);
+    }
+    file.flush()
+        .await
+        .map_err(|error| format!("Could not finish the download: {error}"))?;
+    drop(file);
+
+    Ok(hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect())
+}
+
+fn valid_sha256(value: &str) -> bool {
+    value.len() == 64 && value.chars().all(|character| character.is_ascii_hexdigit())
+}
+
 /// Core installer, separated from the Tauri command so the Windows CI probe
-/// exercises the same download, hash, install and path-check path.
+/// exercises the same download, hash, install and path-check path. The sha256
+/// from the signed manifest is mandatory and is checked before anything runs.
+#[allow(clippy::too_many_arguments)]
 pub async fn install_artifact<F>(
     install_root: PathBuf,
     product_id: &str,
     version: &str,
-    url: &str,
+    source: DownloadSource,
     sha256: &str,
     file_name: &str,
     kind: &str,
+    installed_version: Option<&str>,
     on_progress: F,
 ) -> Result<InstallResult, String>
 where
     F: Fn(u64, Option<u64>) + Send,
 {
-    if product_id.is_empty()
-        || product_id.len() > 64
-        || !product_id
-            .chars()
-            .all(|character| character.is_ascii_alphanumeric() || character == '-')
-    {
+    if !installer::valid_id(product_id) {
         return Err("Invalid product id.".to_string());
     }
-    if kind != "nsis" {
+    let parsed_kind = installer::InstallerKind::parse(kind).ok_or_else(|| {
+        format!("Automatic installation does not support the {kind} package format yet.")
+    })?;
+    if !parsed_kind.supported_on(std::env::consts::OS) {
         return Err(format!(
-            "Automatic installation does not support the {kind} package format yet."
+            "Automatic installation of the {kind} package is not available on this system. Download the installer from the game's release page."
         ));
     }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = (&install_root, version, url, sha256, file_name, &on_progress);
-        return Err("Automatic game installation is currently Windows-only. Download the installer from the game's release page.".to_string());
+    if !valid_sha256(sha256.trim()) {
+        return Err("The signed release manifest has no checksum for this download.".to_string());
     }
+    let safe_name = Path::new(file_name)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty() && name.len() <= 200)
+        .ok_or_else(|| "The release asset name is invalid.".to_string())?
+        .to_string();
+
+    // Resolve where this product lands before downloading anything.
+    let executable: String = match parsed_kind {
+        installer::InstallerKind::Nsis | installer::InstallerKind::Inno => {
+            #[cfg(target_os = "windows")]
+            {
+                installed_executable(product_id)
+                    .ok_or_else(|| {
+                        "Automatic installation is not configured for this product.".to_string()
+                    })?
+                    .to_string()
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                return Err("Windows installers can only run on Windows.".to_string());
+            }
+        }
+        installer::InstallerKind::AppImage => installer::linux_appimage_relative(product_id)
+            .ok_or_else(|| "Automatic installation is not configured for this product.".to_string())?
+            .to_string(),
+        installer::InstallerKind::Dmg => {
+            return Err("Mac disk images are not installed automatically.".to_string())
+        }
+    };
+
+    let directory = std::env::temp_dir().join("lakeside-launcher-downloads");
+    let destination = directory.join(&safe_name);
+    let actual = match download_to_file(&source, &destination, &on_progress).await {
+        Ok(actual) => actual,
+        Err(error) => {
+            let _ = tokio::fs::remove_file(&destination).await;
+            return Err(error);
+        }
+    };
+    if !actual.eq_ignore_ascii_case(sha256.trim()) {
+        let _ = tokio::fs::remove_file(&destination).await;
+        return Err("Download did not match the signed release manifest.".to_string());
+    }
+
+    let action = installer::install_action(installed_version, version);
+
+    let outcome: Result<(), String> = match parsed_kind {
+        installer::InstallerKind::Nsis => {
+            #[cfg(target_os = "windows")]
+            {
+                match std::process::Command::new(&destination).arg("/S").status() {
+                    Ok(status) if status.success() => Ok(()),
+                    Ok(_) => Err("The installer reported a failure.".to_string()),
+                    Err(error) => Err(format!("Could not start the installer: {error}")),
+                }
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                Err("Windows installers can only run on Windows.".to_string())
+            }
+        }
+        installer::InstallerKind::Inno => {
+            #[cfg(target_os = "windows")]
+            {
+                use std::os::windows::process::CommandExt;
+                match installer::windows_inno_dir(&install_root, product_id)
+                    .ok_or_else(|| "No install folder is configured for this product.".to_string())
+                    .and_then(|dir| installer::inno_args(&dir))
+                {
+                    Ok(args) => {
+                        let mut command = std::process::Command::new(&destination);
+                        for argument in args {
+                            command.raw_arg(argument);
+                        }
+                        match command.status() {
+                            Ok(status) if status.success() => Ok(()),
+                            Ok(_) => Err("The installer reported a failure.".to_string()),
+                            Err(error) => Err(format!("Could not start the installer: {error}")),
+                        }
+                    }
+                    Err(error) => Err(error),
+                }
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                Err("Windows installers can only run on Windows.".to_string())
+            }
+        }
+        installer::InstallerKind::AppImage => {
+            place_appimage(&destination, &install_root, product_id).await
+        }
+        installer::InstallerKind::Dmg => Err("Mac disk images are not installed automatically.".to_string()),
+    };
+    let _ = tokio::fs::remove_file(&destination).await;
+    outcome?;
+
+    safe_join(&install_root, &executable)
+        .map_err(|_| "The installer finished but the game executable was not found.".to_string())?;
+
+    Ok(InstallResult {
+        version: version.to_string(),
+        executable,
+        action: match action {
+            installer::InstallAction::Install => "install",
+            installer::InstallAction::Update => "update",
+            installer::InstallAction::Reinstall => "reinstall",
+        }
+        .to_string(),
+    })
+}
+
+/// Copy a verified AppImage into the per-user data directory, mark it
+/// executable and swap it into place. Only this one file is replaced.
+async fn place_appimage(
+    verified: &Path,
+    install_root: &Path,
+    product_id: &str,
+) -> Result<(), String> {
+    let target = installer::linux_appimage_path(install_root, product_id)
+        .ok_or_else(|| "No install location is configured for this product.".to_string())?;
+    let parent = target
+        .parent()
+        .ok_or_else(|| "The install location has no folder.".to_string())?;
+    tokio::fs::create_dir_all(parent)
+        .await
+        .map_err(|error| format!("Could not create the install folder: {error}"))?;
+    let staging = target.with_extension("AppImage.part");
+    tokio::fs::copy(verified, &staging)
+        .await
+        .map_err(|error| format!("Could not place the game: {error}"))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        tokio::fs::set_permissions(&staging, std::fs::Permissions::from_mode(0o755))
+            .await
+            .map_err(|error| format!("Could not make the game executable: {error}"))?;
+    }
+    tokio::fs::rename(&staging, &target)
+        .await
+        .map_err(|error| format!("Could not finish placing the game: {error}"))
+}
+
+/// Installed version from the launcher's own record, falling back to the
+/// Windows uninstall registry for products installed outside the launcher.
+fn detect_installed_version(app: &AppHandle, product_id: &str) -> Option<String> {
+    let root = install_root(app);
+    let state = read_install_state(app);
+    let recorded = state
+        .get(product_id)
+        .filter(|entry| safe_join(&root, &entry.executable).is_ok())
+        .map(|entry| entry.version.clone());
 
     #[cfg(target_os = "windows")]
     {
-        let parsed = validate_url(url, DOWNLOAD_HOSTS)?;
-        let safe_name = Path::new(file_name)
-            .file_name()
-            .and_then(|name| name.to_str())
-            .filter(|name| !name.is_empty() && name.len() <= 200)
-            .ok_or_else(|| "The release asset name is invalid.".to_string())?
-            .to_string();
-
-        let client = reqwest::Client::builder()
-            .user_agent("lakeside-launcher")
-            .timeout(Duration::from_secs(900))
-            .build()
-            .map_err(|error| format!("Could not build the download client: {error}"))?;
-
-        let mut response = client
-            .get(parsed)
-            .send()
-            .await
-            .map_err(|error| format!("Could not download the game: {error}"))?
-            .error_for_status()
-            .map_err(|error| format!("Game download returned {error}"))?;
-
-        validate_url(response.url().as_str(), DOWNLOAD_HOSTS)?;
-        let total = response.content_length();
-
-        let directory = std::env::temp_dir().join("lakeside-launcher-downloads");
-        tokio::fs::create_dir_all(&directory)
-            .await
-            .map_err(|error| format!("Could not create the download directory: {error}"))?;
-        let destination = directory.join(&safe_name);
-        let mut file = tokio::fs::File::create(&destination)
-            .await
-            .map_err(|error| format!("Could not write the download: {error}"))?;
-
-        let mut hasher = Sha256::new();
-        let mut downloaded: u64 = 0;
-        while let Some(chunk) = response
-            .chunk()
-            .await
-            .map_err(|error| format!("Game download stopped: {error}"))?
-        {
-            file.write_all(&chunk)
-                .await
-                .map_err(|error| format!("Could not write the download: {error}"))?;
-            hasher.update(&chunk);
-            downloaded += chunk.len() as u64;
-            on_progress(downloaded, total);
+        if installer::inno_app_id(product_id).is_some() {
+            // An Inno setup run by hand updates the registry, not installs.json.
+            if let Some(version) = windows_inno_installed_version(product_id) {
+                return Some(version);
+            }
+        } else if recorded.is_none() && product_id == "ahd" {
+            return windows_installed_version("AHDClient");
         }
-        file.flush()
-            .await
-            .map_err(|error| format!("Could not finish the download: {error}"))?;
-        drop(file);
-
-        let digest = hasher.finalize();
-        let actual: String = digest.iter().map(|byte| format!("{byte:02x}")).collect();
-        if !actual.eq_ignore_ascii_case(sha256.trim()) {
-            let _ = tokio::fs::remove_file(&destination).await;
-            return Err("Download did not match the signed release manifest.".to_string());
-        }
-
-        let status = std::process::Command::new(&destination)
-            .arg("/S")
-            .status()
-            .map_err(|error| format!("Could not start the installer: {error}"))?;
-        let _ = tokio::fs::remove_file(&destination).await;
-        if !status.success() {
-            return Err("The installer reported a failure.".to_string());
-        }
-
-        let executable = installed_executable(product_id).ok_or_else(|| {
-            "Automatic installation is not configured for this product.".to_string()
-        })?;
-        safe_join(&install_root, executable).map_err(|_| {
-            "The installer finished but the game executable was not found.".to_string()
-        })?;
-
-        Ok(InstallResult {
-            version: version.to_string(),
-            executable: executable.to_string(),
-        })
     }
+    recorded
 }
 
 #[tauri::command]
@@ -708,23 +1107,24 @@ fn installed_products(app: AppHandle) -> HashMap<String, InstalledProduct> {
 
     #[cfg(target_os = "windows")]
     {
-        for product_id in ["ahd"] {
-            if state.contains_key(product_id) {
-                continue;
-            }
+        for product_id in ["ahd", "corporate-warfare"] {
             let Some(executable) = installed_executable(product_id) else {
                 continue;
             };
             if safe_join(&root, executable).is_err() {
                 continue;
             }
-            if let Some(version) = windows_installed_version("AHDClient") {
+            if state.contains_key(product_id) && installer::inno_app_id(product_id).is_none() {
+                continue;
+            }
+            if let Some(version) = detect_installed_version(&app, product_id) {
+                let installed_at = state.get(product_id).map(|entry| entry.installed_at).unwrap_or(0);
                 state.insert(
                     product_id.to_string(),
                     InstalledProduct {
                         version,
                         executable: executable.to_string(),
-                        installed_at: 0,
+                        installed_at,
                     },
                 );
             }
@@ -735,6 +1135,7 @@ fn installed_products(app: AppHandle) -> HashMap<String, InstalledProduct> {
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 async fn install_release(
     app: AppHandle,
     product_id: String,
@@ -743,17 +1144,33 @@ async fn install_release(
     sha256: String,
     file_name: String,
     kind: String,
+    commercial_id: Option<String>,
 ) -> Result<InstallResult, String> {
+    let source = match commercial_id {
+        Some(commercial_id) => {
+            let stored = read_session(&app)?
+                .ok_or_else(|| "Sign in to Lakeside to download this game.".to_string())?;
+            DownloadSource::Account {
+                base: platform_base(),
+                commercial_id,
+                token: stored.token,
+            }
+        }
+        None => DownloadSource::Url(url),
+    };
+    let installed_version = detect_installed_version(&app, &product_id);
+
     let progress_app = app.clone();
     let progress_product = product_id.clone();
     let result = install_artifact(
         install_root(&app),
         &product_id,
         &version,
-        &url,
+        source,
         &sha256,
         &file_name,
         &kind,
+        installed_version.as_deref(),
         move |downloaded, total| {
             let _ = progress_app.emit(
                 "install-progress",
@@ -1005,6 +1422,8 @@ pub fn run() {
     builder
         .invoke_handler(tauri::generate_handler![
             launch_product,
+            detect_desktop_app,
+            launch_desktop_app,
             open_web_game,
             open_external,
             begin_sign_in,

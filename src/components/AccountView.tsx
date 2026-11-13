@@ -1,13 +1,14 @@
 import { CATALOG, formatPrice, type Entitlements } from "../catalog";
 import type { Session } from "../platform/client";
 import type { ReleaseProduct } from "../lib/tauri";
+import type { SignInProvider } from "../lib/signin";
 
 interface Props {
   session: Session | null;
   entitlements: Entitlements;
   mode: "demo" | "live";
   releases: Record<string, ReleaseProduct>;
-  onSignIn: () => void;
+  onSignIn: (provider: SignInProvider) => void;
   onSignOut: () => void;
   onRefresh: () => void;
 }
@@ -57,9 +58,14 @@ export function AccountView({
                 Sign in with your Lakeside account to load the games and packs attached to it.
                 The launcher never handles card details; checkout opens in your browser.
               </p>
-              <button type="button" className="btn primary" onClick={onSignIn}>
-                Sign in
-              </button>
+              <div className="actions">
+                <button type="button" className="btn primary" onClick={() => onSignIn("discord")}>
+                  Sign in with Discord
+                </button>
+                <button type="button" className="btn" onClick={() => onSignIn("ahd")}>
+                  Sign in with A House Divided
+                </button>
+              </div>
             </>
           )}
         </article>
