@@ -136,6 +136,8 @@ describe("native delivery metadata", () => {
     expect(installerSupported("inno", "windows")).toBe(true);
     expect(installerSupported("appimage", "linux")).toBe(true);
     expect(installerSupported("appimage", "windows")).toBe(false);
-    expect(installerSupported("dmg", "macos")).toBe(false);
+    expect(installerSupported("dmg", "macos")).toBe(true);
+    expect(installerSupported("dmg", "linux")).toBe(false);
+    expect(installerSupported("appimage", "macos")).toBe(false);
   });
 });

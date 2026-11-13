@@ -26,6 +26,25 @@ workflow signs and timestamps both binaries automatically as soon as the
 `WINDOWS_CERTIFICATE` and `WINDOWS_CERTIFICATE_PASSWORD` secrets are set; see
 [Windows code signing](#windows-code-signing).
 
+## Download (macOS and Linux)
+
+Builds for macOS and Linux come from the same release workflow (`desktop
+bundles`, on version tags and manual runs). They are **unsigned** for now.
+
+- **macOS** (Apple silicon and Intel, one universal build): open the `.dmg`,
+  drag Lakeside into Applications. The first time, right-click (or Control-click)
+  the app and choose **Open**, then confirm. Double-clicking an unsigned app is
+  blocked by Gatekeeper; the right-click Open step is only needed once.
+- **Linux AppImage**: `chmod +x Lakeside_*_amd64.AppImage` then run it. It
+  updates itself in place.
+- **Linux .deb**: `sudo apt install ./Lakeside_*_amd64.deb`. A .deb cannot
+  update itself; install the next .deb (or switch to the AppImage) to update.
+
+Games: Corporate Warfare installs on Linux as an AppImage the launcher
+downloads, checks and marks executable. On a Mac the launcher downloads the
+checked `.dmg` and opens it for you to drag the app out. Products that only
+exist for Windows say "Not built for this system" on the tile.
+
 ## What Phase 0 ships
 
 - Library grid with owned/free tiles, search, and a detail sheet.
@@ -258,3 +277,28 @@ per-platform executables).
   for everyone else (opens the store page), "Sign in to install" when signed
   out, and "Coming tonight" until a build is published. On a Mac the tile sends
   the player to the account page for a browser download.
+
+## Publishing a launcher release (all platforms)
+
+1. Merge, bump the version in `package.json`, `src-tauri/Cargo.toml` and
+   `src-tauri/tauri.conf.json`, tag `vX.Y.Z`. The tag starts `desktop bundles`
+   (windows, linux, macos jobs). Each job runs a smoke check (app starts under
+   a virtual display on Linux, window loads, exits cleanly).
+2. Download the three artifacts from the run:
+   `gh run download <run-id> -n lakeside-windows-x64 -n lakeside-linux-x64 -n lakeside-macos-universal`
+   (each lands in its own folder).
+3. Publish all platforms in ONE feed write. The updater errors for a platform
+   missing from the feed, so never publish one platform of a new version alone:
+
+   ```sh
+   node scripts/publish-update.mjs --version X.Y.Z --notes "..." \
+     --artifact windows-x86_64:<win>/Lakeside_X.Y.Z_x64-setup.exe:<win>/Lakeside_X.Y.Z_x64-setup.exe.sig \
+     --artifact darwin-aarch64,darwin-x86_64:<mac>/Lakeside.app.tar.gz:<mac>/Lakeside.app.tar.gz.sig \
+     --artifact linux-x86_64:<linux>/Lakeside_X.Y.Z_amd64.AppImage:<linux>/Lakeside_X.Y.Z_amd64.AppImage.sig
+   ```
+
+   The macOS updater file is the `.app.tar.gz`. The `.dmg`, the `.deb` and the
+   Windows `Lakeside.exe` are first-time downloads only: copy them next to the
+   feed (or attach them to the GitHub release with `gh release create`).
+4. Back up `latest.json` first (`latest.prev.json`) so the feed can be rolled
+   back by copying it over.

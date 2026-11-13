@@ -28,12 +28,12 @@ impl InstallerKind {
     }
 
     /// Whether this launcher build can run the kind on `os` (a
-    /// `std::env::consts::OS` value). Dmg is deliberately unsupported.
+    /// `std::env::consts::OS` value). A Dmg is opened for the player, not installed.
     pub fn supported_on(self, os: &str) -> bool {
         match self {
             Self::Nsis | Self::Inno => os == "windows",
             Self::AppImage => os == "linux",
-            Self::Dmg => false,
+            Self::Dmg => os == "macos",
         }
     }
 }
@@ -388,7 +388,8 @@ mod tests {
         assert!(InstallerKind::AppImage.supported_on("linux"));
         assert!(!InstallerKind::AppImage.supported_on("windows"));
         assert!(InstallerKind::Nsis.supported_on("windows"));
-        assert!(!InstallerKind::Dmg.supported_on("macos"));
+        assert!(InstallerKind::Dmg.supported_on("macos"));
+        assert!(!InstallerKind::Dmg.supported_on("linux"));
     }
 
     #[test]

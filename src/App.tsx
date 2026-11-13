@@ -310,12 +310,14 @@ export function App(): JSX.Element {
     return key ? (release.artifacts[key] ?? null) : null;
   }
 
-  /** Paid build on a Mac: the launcher cannot install it, so send the player to the account page. */
+  /** Paid build on a Mac with no disk image published yet: send the player to the account page. */
   function macBrowserDownload(product: Product): boolean {
+    const artifact = artifactFor(product);
     return (
       detectPlatform() === "macos" &&
       !!product.browserDownloadUrl &&
-      canLaunchDesktop(product, entitlements)
+      canLaunchDesktop(product, entitlements) &&
+      !(artifact?.sha256 && installerSupported(artifact.kind, "macos"))
     );
   }
 
@@ -388,6 +390,12 @@ export function App(): JSX.Element {
         kind: artifact.kind,
         commercialId: product.authenticatedDownload ? (product.productId ?? undefined) : undefined,
       });
+      if (result.action === "opened") {
+        setNotice(
+          `Opened the ${product.title} disk image. Drag the app into Applications, then right-click it and choose Open the first time.`,
+        );
+        return;
+      }
       setInstalled((previous) => ({
         ...previous,
         [product.id]: {
@@ -517,6 +525,9 @@ export function App(): JSX.Element {
       if (canInstall(product)) {
         const version = latestVersion(product);
         return version ? `Install ${version}` : "Install";
+      }
+      if (product.delivery === "native" && !product.platforms.includes(detectPlatform())) {
+        return product.webUrl ? "Play online" : "Not built for this system";
       }
       return "Launch desktop";
     }
