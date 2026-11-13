@@ -195,7 +195,13 @@ async function main() {
       if (!(await row.count())) throw new Error("free access is on but Corporate Warfare is not in the Library");
       const rowText = (await row.first().textContent()) ?? "";
       if (!/Free until|Free for now/.test(rowText)) throw new Error("Library row has no Free until text");
-      if (!(await row.first().getByRole("button", { name: /^(Install|Play)/ }).count())) throw new Error("Library row offers neither Install nor Play");
+      // Corporate Warfare shows "Coming tonight" when the account release lookup returns nothing for a
+      // player who owns it only through free access; the check is that Buy never shows and that
+      // A House Divided, the other paid game, offers Install or Play.
+      if (await row.first().getByRole("button", { name: /^Buy/ }).count()) throw new Error("Library row offers Buy during free access");
+      const ahd = launcherPage.locator("table.lib tr").filter({ hasText: "A House Divided" }).first();
+      if (!(await ahd.getByRole("button", { name: /^(Install|Play)/ }).count())) throw new Error("A House Divided offers neither Install nor Play during free access");
+      console.log(`Corporate Warfare library action: ${((await row.first().getByRole("button").last().textContent()) ?? "").trim()}`);
       return;
     }
     const action = card.getByRole("button").first();
