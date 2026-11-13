@@ -201,7 +201,7 @@ export function GameView({
                   ))}
                   {tiers.map((tier) => (
                     <tr key={tier.id}>
-                      <td>
+                      <td className="wrap">
                         <b>{tier.name}</b>
                         <br />
                         <small className="muted">

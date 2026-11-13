@@ -190,8 +190,13 @@ pub fn parse_uninstall_string(raw: &str) -> Option<(PathBuf, Vec<String>)> {
 /// uninstaller's own file name. Registry-supplied arguments are never reused.
 pub fn silent_uninstall_args(program: &Path) -> Option<Vec<String>> {
     let name = program.file_name()?.to_str()?.to_lowercase();
-    if name.starts_with("unins") && name.ends_with(".exe") {
-        // Inno Setup.
+    let inno_serial = name
+        .strip_prefix("unins")
+        .and_then(|rest| rest.strip_suffix(".exe"))
+        .map(|digits| !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit()))
+        .unwrap_or(false);
+    if inno_serial {
+        // Inno Setup: unins000.exe, unins001.exe, ...
         return Some(vec![
             "/VERYSILENT".to_string(),
             "/SUPPRESSMSGBOXES".to_string(),
@@ -353,6 +358,8 @@ mod tests {
         assert_eq!(silent_uninstall_args(Path::new("/x/uninstall.exe")), Some(vec!["/S".to_string()]));
         assert!(silent_uninstall_args(Path::new("/x/cmd.exe")).is_none());
         assert!(silent_uninstall_args(Path::new("/x/evil-unins.exe")).is_none());
+        assert!(silent_uninstall_args(Path::new("/x/unins.exe")).is_none());
+        assert!(silent_uninstall_args(Path::new("/x/unins000x.exe")).is_none());
     }
 
     #[test]

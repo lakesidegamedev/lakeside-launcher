@@ -899,7 +899,7 @@ export function App(): JSX.Element {
               notes,
               Object.fromEntries(CATALOG.map((product) => [product.id, product.companionOf ? (PRODUCTS_BY_ID.get(product.companionOf)?.title ?? product.title) : product.title])),
             )}
-            onPlay={runAction}
+            onPlay={(row) => (row.desktop ? void handleLaunch(row.desktop) : undefined)}
             onOpenGame={(id) => {
               setView("library");
               setGameId(PRODUCTS_BY_ID.get(id)?.companionOf ?? id);

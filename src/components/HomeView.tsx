@@ -69,11 +69,9 @@ export function HomeView({
                     </small>
                   </td>
                   <td className="r">
-                    {row.action.kind === "launch" ? (
-                      <button type="button" className="btn sm p" onClick={() => onPlay(row)}>
-                        Play
-                      </button>
-                    ) : null}
+                    <button type="button" className="btn sm p" onClick={() => onPlay(row)}>
+                      Play
+                    </button>
                   </td>
                 </tr>
               ))}

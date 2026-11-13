@@ -259,10 +259,17 @@ export async function installDetails(productId: string): Promise<InstallDetails>
   return invoke<InstallDetails>("install_details", { productId });
 }
 
-/** The home feed, validated by the shell (https, studio hosts, schema). Browser previews skip it. */
+/**
+ * The home feed. The desktop shell fetches and validates it (https, studio
+ * hosts, schema). A browser preview asks the site directly; if the site blocks
+ * that, the caller falls back to the bundled slides. Slides are validated again
+ * in the webview either way.
+ */
 export async function fetchHomeFeed(): Promise<import("../components/home/slides").HomeFeed | null> {
-  if (!isDesktop()) return null;
-  return invoke<import("../components/home/slides").HomeFeed>("fetch_home_feed");
+  if (isDesktop()) return invoke<import("../components/home/slides").HomeFeed>("fetch_home_feed");
+  const response = await fetch("https://lakesidegames.net/download/launcher/home.json");
+  if (!response.ok) return null;
+  return (await response.json()) as import("../components/home/slides").HomeFeed;
 }
 
 /** Whether the studio free-access switch is on (the public switch the entitlements read). */
