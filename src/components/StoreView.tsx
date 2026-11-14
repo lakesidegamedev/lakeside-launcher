@@ -158,7 +158,11 @@ export function StoreView({
                   </div>
                 </td>
                 <td>
-                  <b>{free && paid(product) && owned !== "owned" ? "Free right now" : priceSummary(product, catalog, entitlements)}</b>
+                  <b>
+                    {free && paid(product) && owned !== "owned"
+                      ? freePrice(priceSummary(product, catalog, entitlements).replace(/^Free to play, /, ""))
+                      : priceSummary(product, catalog, entitlements)}
+                  </b>
                 </td>
                 <td>
                   {freeIds?.has(product.id) && freeText ? (
@@ -211,10 +215,10 @@ export function StoreView({
                   <td>{product.title}</td>
                   <td className="wrap">{row.detail}</td>
                   <td className="r">
-                    <b>{free && !row.owned ? freePrice(row.priceText) : row.priceText}</b>
+                    <b>{free && paid(product) && !row.owned ? freePrice(row.priceText) : row.priceText}</b>
                   </td>
                   <td className="r">
-                    {free ? (
+                    {free && paid(product) ? (
                       freeAction(row.owned)
                     ) : row.owned ? (
                       <span className="owned">Owned</span>
@@ -247,13 +251,13 @@ export function StoreView({
                     </td>
                     <td className="r">
                       <b>
-                        {free && !product.entitlementIds.some((id) => entitlements[id] === "owned")
+                        {free && paid(product) && !product.entitlementIds.some((id) => entitlements[id] === "owned")
                           ? freePrice(formatPrice(edition.priceCents, edition.currency))
                           : formatPrice(edition.priceCents, edition.currency)}
                       </b>
                     </td>
                     <td className="r">
-                      {free ? (
+                      {free && paid(product) ? (
                         freeAction(product.entitlementIds.some((id) => entitlements[id] === "owned"))
                       ) : product.entitlementIds.some((id) => entitlements[id] === "owned") ? (
                         <span className="owned">Owned</span>
