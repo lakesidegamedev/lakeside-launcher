@@ -85,6 +85,35 @@ describe("store tab during free access", () => {
     expect(html).not.toContain(">Choose<");
   });
 
+  it("Margin of Victory games row reads Free with the pack price struck during free access", () => {
+    const mov = CATALOG.filter((product) => product.id === "electioneer");
+    const render = (freeWeek: string | null): string =>
+      renderToStaticMarkup(
+        <StoreView
+          catalog={CATALOG_SNAPSHOT}
+          live
+          entitlements={{}}
+          freeIds={freeWeek ? new Set(["electioneer"]) : undefined}
+          freeText={freeWeek}
+          freeWeek={freeWeek}
+          products={mov}
+          signedIn
+          onBuy={noop}
+          onSignIn={noop}
+          onOpenUrl={noop}
+          onOpenGame={noop}
+          onRefresh={noop}
+        />,
+      );
+    const on = render("Free until Sunday, November 22 at 5:00 PM Eastern");
+    expect(on).toContain("<s>packs from $0.99</s>");
+    expect(on).not.toContain("Free base game");
+    expect(on).toContain("Free until Sunday, November 22");
+    const off = render(null);
+    expect(off).toContain("Free base game, packs from $0.99");
+    expect(off).not.toContain("<s>packs from");
+  });
+
   it("Margin of Victory packs ask a signed-out player to sign in", () => {
     const mov = CATALOG.filter((product) => product.id === "electioneer");
     const html = renderToStaticMarkup(

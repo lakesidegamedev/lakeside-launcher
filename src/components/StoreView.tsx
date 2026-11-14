@@ -167,8 +167,10 @@ export function StoreView({
                 </td>
                 <td>
                   <b>
-                    {free && paid(product) && !bought(product, owned === "owned")
-                      ? freePrice(priceSummary(product, catalog, entitlements).replace(/^Free to play, /, ""))
+                    {free && (paid(product) || (product.addonGame && addonFree(product))) && !bought(product, owned === "owned")
+                      ? freePrice(
+                          priceSummary(product, catalog, entitlements).replace(/^Free (to play|base game), /, ""),
+                        )
                       : priceSummary(product, catalog, entitlements)}
                   </b>
                 </td>
