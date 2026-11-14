@@ -53,6 +53,8 @@ const GAMES = {
     versionPrefix: "1.",
     publisher: "Lakeside Games",
     displayNameStart: "Urban Sprawl",
+    // Since 1.0.0-preview.4 saves live outside the install folder.
+    savesDir: path.join(ROAMING, "Urban Sprawl", "saves"),
   },
 };
 
@@ -378,6 +380,12 @@ async function playThrough(key, g) {
     const documentsMarker = path.join(ROAMING, `e2e-${key}-saves-marker.txt`);
     fs.writeFileSync(documentsMarker, "marker\n");
     sentinels.push(documentsMarker);
+    if (g.savesDir) {
+      fs.mkdirSync(g.savesDir, { recursive: true });
+      const realMarker = path.join(g.savesDir, "e2e-saves-marker.txt");
+      fs.writeFileSync(realMarker, "launcher e2e marker: uninstall must not remove this\n");
+      sentinels.push(realMarker);
+    }
     console.log(`markers planted: ${sentinels.map((f) => path.relative(process.env.USERPROFILE, f)).join(", ")}`);
   });
 
