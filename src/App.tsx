@@ -1029,9 +1029,11 @@ export function App(): JSX.Element {
             entitlements={entitlements}
             freeIds={freeIds}
             freeText={freeText}
+            freeWeek={freeUntilText(freeAccess)}
             products={catalogProducts.filter((product) => !product.companionOf)}
             signedIn={session !== null}
             onBuy={handleBuy}
+            onSignIn={() => setGuest(false)}
             onOpenUrl={(url) => openUrl(url)}
             onOpenGame={(product) => {
               setView("library");
