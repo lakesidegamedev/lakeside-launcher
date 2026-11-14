@@ -9,7 +9,7 @@ export const CATALOG_SNAPSHOT: LiveCatalog = {
       "id": "complete",
       "game": "electioneer",
       "name": "Complete Collection",
-      "description": "Every country and every scenario in Margin of Victory, including scenarios added later.",
+      "description": "All 131 elections in all 14 countries from 1932 to 2027, unlocking the 116 that are not already free, plus every country and election added later.",
       "priceCents": 399,
       "currency": "usd"
     },
@@ -17,7 +17,7 @@ export const CATALOG_SNAPSHOT: LiveCatalog = {
       "id": "us-historical",
       "game": "electioneer",
       "name": "United States",
-      "description": "Fifteen presidential races from 1960 to 2016, each with its real campaign events.",
+      "description": "Twenty-four presidential elections from 1932 to 2024 under the Electoral College, unlocking the 22 that are not already free (2020 and 2024 are free).",
       "priceCents": 99,
       "currency": "usd"
     },
@@ -25,7 +25,7 @@ export const CATALOG_SNAPSHOT: LiveCatalog = {
       "id": "uk-elections",
       "game": "electioneer",
       "name": "United Kingdom",
-      "description": "Eighteen general elections from 1951 to 2024, hung parliaments and all.",
+      "description": "Eighteen general elections from 1951 to 2024 under first past the post, unlocking the 17 before the free 2024 election.",
       "priceCents": 99,
       "currency": "usd"
     },
@@ -33,7 +33,7 @@ export const CATALOG_SNAPSHOT: LiveCatalog = {
       "id": "canada",
       "game": "electioneer",
       "name": "Canada",
-      "description": "Four federal elections from 2015 to 2025.",
+      "description": "Twelve federal elections from 1984 to 2025 under first past the post, unlocking the 11 before the free 2025 election.",
       "priceCents": 99,
       "currency": "usd"
     },
@@ -41,7 +41,7 @@ export const CATALOG_SNAPSHOT: LiveCatalog = {
       "id": "germany",
       "game": "electioneer",
       "name": "Germany",
-      "description": "Three Bundestag elections from 2017 to 2025.",
+      "description": "Ten Bundestag elections from 1990 to 2025 under mixed-member proportional representation, unlocking the 9 before the free 2025 election.",
       "priceCents": 99,
       "currency": "usd"
     },
@@ -49,7 +49,7 @@ export const CATALOG_SNAPSHOT: LiveCatalog = {
       "id": "france",
       "game": "electioneer",
       "name": "France",
-      "description": "Four two-round presidential elections from 2012 to 2027.",
+      "description": "Nine two-round presidential elections from 1981 to 2027, unlocking the 8 that are not already free (2022 is free).",
       "priceCents": 99,
       "currency": "usd"
     },
@@ -57,7 +57,7 @@ export const CATALOG_SNAPSHOT: LiveCatalog = {
       "id": "australia",
       "game": "electioneer",
       "name": "Australia",
-      "description": "Three preferential-vote federal elections from 2019 to 2025.",
+      "description": "Eleven federal elections from 1996 to 2025 under preferential voting, unlocking the 10 before the free 2025 election.",
       "priceCents": 99,
       "currency": "usd"
     },
@@ -65,7 +65,7 @@ export const CATALOG_SNAPSHOT: LiveCatalog = {
       "id": "new-zealand",
       "game": "electioneer",
       "name": "New Zealand",
-      "description": "Mixed-member proportional elections in Aotearoa, where a handful of seats decides who governs.",
+      "description": "Six MMP elections from 2008 to 2023, unlocking the 5 before the free 2023 election.",
       "priceCents": 99,
       "currency": "usd"
     },
@@ -73,7 +73,7 @@ export const CATALOG_SNAPSHOT: LiveCatalog = {
       "id": "india",
       "game": "electioneer",
       "name": "India",
-      "description": "The world's largest election: coalition arithmetic across hundreds of millions of voters.",
+      "description": "Six Lok Sabha elections from 1999 to 2024 under first past the post, unlocking the 5 before the free 2024 election.",
       "priceCents": 99,
       "currency": "usd"
     },
@@ -81,7 +81,7 @@ export const CATALOG_SNAPSHOT: LiveCatalog = {
       "id": "japan",
       "game": "electioneer",
       "name": "Japan",
-      "description": "Lower house elections where factions and coalition partners matter as much as the vote.",
+      "description": "Eight House of Representatives elections from 2005 to 2026 under parallel voting, unlocking the 7 that are not already free (2024 is free).",
       "priceCents": 99,
       "currency": "usd"
     },
@@ -89,7 +89,7 @@ export const CATALOG_SNAPSHOT: LiveCatalog = {
       "id": "brazil",
       "game": "electioneer",
       "name": "Brazil",
-      "description": "Two-round presidential races in a fractured, many-party democracy.",
+      "description": "Six two-round presidential elections from 2002 to 2022, unlocking the 5 before the free 2022 election.",
       "priceCents": 99,
       "currency": "usd"
     },
@@ -97,7 +97,7 @@ export const CATALOG_SNAPSHOT: LiveCatalog = {
       "id": "ireland",
       "game": "electioneer",
       "name": "Ireland",
-      "description": "Single transferable vote elections where lower preferences decide the last seats.",
+      "description": "Five Dáil elections from 2007 to 2024 under the single transferable vote, unlocking the 4 before the free 2024 election.",
       "priceCents": 99,
       "currency": "usd"
     },
@@ -105,7 +105,7 @@ export const CATALOG_SNAPSHOT: LiveCatalog = {
       "id": "spain",
       "game": "electioneer",
       "name": "Spain",
-      "description": "Regional parties and provincial seat quirks shape every road to a governing majority.",
+      "description": "Six Congress of Deputies elections from 2011 to 2023 under proportional representation by province, unlocking the 5 before the free 2023 election.",
       "priceCents": 99,
       "currency": "usd"
     },
@@ -113,7 +113,7 @@ export const CATALOG_SNAPSHOT: LiveCatalog = {
       "id": "italy",
       "game": "electioneer",
       "name": "Italy",
-      "description": "Shifting electoral laws and fragile coalitions in a famously unstable parliament.",
+      "description": "Five Chamber of Deputies elections from 2006 to 2022 under changing electoral laws, unlocking the 4 before the free 2022 election.",
       "priceCents": 99,
       "currency": "usd"
     },
@@ -121,7 +121,7 @@ export const CATALOG_SNAPSHOT: LiveCatalog = {
       "id": "mexico",
       "game": "electioneer",
       "name": "Mexico",
-      "description": "Single-term presidential races and a congress split between districts and proportional lists.",
+      "description": "Five presidential elections from 2000 to 2024, each won by the most votes in one round, unlocking the 4 before the free 2024 election.",
       "priceCents": 99,
       "currency": "usd"
     },
@@ -129,7 +129,7 @@ export const CATALOG_SNAPSHOT: LiveCatalog = {
       "id": "corporate-warfare",
       "game": "corporate-warfare",
       "name": "Corporate Warfare",
-      "description": "The corporate strategy game. One purchase, yours to keep.",
+      "description": "The corporate strategy game. One purchase, yours to keep; also included with Supporter+ and Champion.",
       "priceCents": 1499,
       "currency": "usd"
     },
@@ -137,7 +137,7 @@ export const CATALOG_SNAPSHOT: LiveCatalog = {
       "id": "ahd-singleplayer",
       "game": "a-house-divided",
       "name": "A House Divided: Single-player",
-      "description": "The single-player edition of A House Divided. One purchase, yours to keep.",
+      "description": "The single-player edition of A House Divided. One purchase, yours to keep; also included with Supporter+ and Champion.",
       "priceCents": 1499,
       "currency": "usd"
     }
