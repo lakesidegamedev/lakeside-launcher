@@ -20,9 +20,12 @@ interface Props {
   /** Paid products open only because free access is on, and the "Free until ..." wording. */
   freeIds?: ReadonlySet<string>;
   freeText?: string | null;
+  /** The public free-access wording ("Free until ..."), shown signed in or not. Null when off. */
+  freeWeek?: string | null;
   products: readonly Product[];
   signedIn: boolean;
   onBuy: (product: Product) => void;
+  onSignIn?: () => void;
   onOpenUrl: (url: string) => void;
   onOpenGame: (product: Product) => void;
   onRefresh: () => void;
@@ -42,9 +45,11 @@ export function StoreView({
   entitlements,
   freeIds,
   freeText,
+  freeWeek = null,
   products,
   signedIn,
   onBuy,
+  onSignIn,
   onOpenUrl,
   onOpenGame,
   onRefresh,
@@ -54,6 +59,28 @@ export function StoreView({
   const addonItems = products.flatMap((product) =>
     addOnRows(addonsFor(product, catalog), entitlements).map((row) => ({ product, row })),
   );
+  // While free access is on, no paid item shows a price or a Buy button: it says
+  // Free (usual price struck through), and signed-out players are asked to sign in.
+  const free = freeWeek !== null;
+  const paid = (product: Product): boolean => product.entitlementIds.length > 0 && !product.staffOnly;
+  const freePrice = (usual: string): JSX.Element => (
+    <>
+      Free{" "}
+      <small className="muted">
+        <s>{usual}</s>
+      </small>
+    </>
+  );
+  const freeAction = (owned: boolean): JSX.Element =>
+    owned ? (
+      <span className="owned">Owned</span>
+    ) : signedIn ? (
+      <span className="tag">Free</span>
+    ) : (
+      <button type="button" className="btn sm p" onClick={onSignIn}>
+        Sign in to play free
+      </button>
+    );
   const editions = products
     .map((product) => ({ product, edition: findLive(catalog, product.liveId) }))
     .filter((entry) => entry.edition !== null && entry.product.webUrl !== null);
@@ -75,7 +102,11 @@ export function StoreView({
       </div>
       <div className="head tight">
         <h1>Store</h1>
-        <span className="muted">Buy once, keep it on your Lakeside account.</span>
+        <span className="muted">
+          {free
+            ? `Every game is free to play right now${signedIn ? "" : " with a free Lakeside account"}.`
+            : "Buy once, keep it on your Lakeside account."}
+        </span>
         <div className="sp">
           {signedIn ? (
             <button type="button" className="btn sm" onClick={onRefresh}>
@@ -91,7 +122,19 @@ export function StoreView({
         </div>
       ) : null}
 
-      {freeText ? <div className="note" style={{ marginBottom: 8 }}>{freeText}: install and play every paid game, no purchase needed.</div> : null}
+      {freeText || freeWeek ? (
+        <div className="note" style={{ marginBottom: 8 }}>
+          {freeText ?? freeWeek}: install and play every paid game, no purchase needed.
+          {!signedIn && onSignIn ? (
+            <>
+              {" "}
+              <button type="button" className="btn sm p" onClick={onSignIn}>
+                Sign in to play free
+              </button>
+            </>
+          ) : null}
+        </div>
+      ) : null}
 
       <h2>Games</h2>
       <table>
@@ -115,7 +158,11 @@ export function StoreView({
                   </div>
                 </td>
                 <td>
-                  <b>{priceSummary(product, catalog, entitlements)}</b>
+                  <b>
+                    {free && paid(product) && owned !== "owned"
+                      ? freePrice(priceSummary(product, catalog, entitlements).replace(/^Free to play, /, ""))
+                      : priceSummary(product, catalog, entitlements)}
+                  </b>
                 </td>
                 <td>
                   {freeIds?.has(product.id) && freeText ? (
@@ -127,7 +174,11 @@ export function StoreView({
                   ) : null}
                 </td>
                 <td className="r">
-                  {owned === "buy" ? (
+                  {owned === "buy" && free && !signedIn ? (
+                    <button type="button" className="btn sm p" onClick={onSignIn}>
+                      Sign in to play free
+                    </button>
+                  ) : owned === "buy" && !free ? (
                     <button type="button" className="btn sm p" onClick={() => onBuy(product)}>
                       Buy
                     </button>
@@ -164,10 +215,12 @@ export function StoreView({
                   <td>{product.title}</td>
                   <td className="wrap">{row.detail}</td>
                   <td className="r">
-                    <b>{row.priceText}</b>
+                    <b>{free && paid(product) && !row.owned ? freePrice(row.priceText) : row.priceText}</b>
                   </td>
                   <td className="r">
-                    {row.owned ? (
+                    {free && paid(product) ? (
+                      freeAction(row.owned)
+                    ) : row.owned ? (
                       <span className="owned">Owned</span>
                     ) : (
                       <button
@@ -197,10 +250,16 @@ export function StoreView({
                       })()}
                     </td>
                     <td className="r">
-                      <b>{formatPrice(edition.priceCents, edition.currency)}</b>
+                      <b>
+                        {free && paid(product) && !product.entitlementIds.some((id) => entitlements[id] === "owned")
+                          ? freePrice(formatPrice(edition.priceCents, edition.currency))
+                          : formatPrice(edition.priceCents, edition.currency)}
+                      </b>
                     </td>
                     <td className="r">
-                      {product.entitlementIds.some((id) => entitlements[id] === "owned") ? (
+                      {free && paid(product) ? (
+                        freeAction(product.entitlementIds.some((id) => entitlements[id] === "owned"))
+                      ) : product.entitlementIds.some((id) => entitlements[id] === "owned") ? (
                         <span className="owned">Owned</span>
                       ) : (
                         <button type="button" className="btn sm p" onClick={() => onBuy(product)}>
