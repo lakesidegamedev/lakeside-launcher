@@ -120,6 +120,8 @@ export interface HomeShowcase {
   slides: ShowcaseSlide[];
 }
 
+const WEEKDAY = /\b(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b/;
+
 export function chooseShowcase(
   feed: HomeFeed | null | undefined,
   player: PlayerState,
@@ -140,7 +142,7 @@ export function chooseShowcase(
     events: events.map((event) => (event.kind === "free" ? { ...event, line: liveLine(event.line) } : event)),
     slides: slides.map((entry) =>
       entry.slide.kind === "free"
-        ? { ...entry, slide: { ...entry.slide, line: liveLine(entry.slide.line), ...(entry.slide.tile ? { tile: "Everything is free" } : {}) } }
+        ? { ...entry, slide: { ...entry.slide, line: liveLine(entry.slide.line), ...(entry.slide.tile && WEEKDAY.test(entry.slide.tile) ? { tile: "Everything is free" } : {}) } }
         : entry,
     ),
   };
