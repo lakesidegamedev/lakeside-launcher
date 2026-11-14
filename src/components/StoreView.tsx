@@ -63,6 +63,9 @@ export function StoreView({
   // Free (usual price struck through), and signed-out players are asked to sign in.
   const free = freeWeek !== null;
   const paid = (product: Product): boolean => product.entitlementIds.length > 0 && !product.staffOnly;
+  // Add-on rows (Margin of Victory packs) are opened by free access too, although the base
+  // product has no entitlement of its own. Staff-only products stay out.
+  const addonFree = (product: Product): boolean => !product.staffOnly;
   const freePrice = (usual: string): JSX.Element => (
     <>
       Free{" "}
@@ -73,7 +76,9 @@ export function StoreView({
   );
   // Free access shows up in the entitlements as owned. For the store that is not owning:
   // the game is free for now, so it gets the Free treatment, not Owned.
-  const bought = (product: Product, owned: boolean): boolean => owned && !(free && freeIds?.has(product.id));
+  // Packs of a game with no base entitlement are never merged in, so owning one is real.
+  const bought = (product: Product, owned: boolean): boolean =>
+    owned && !(free && freeIds?.has(product.id) && product.entitlementIds.length > 0);
   const freeAction = (owned: boolean): JSX.Element =>
     owned ? (
       <span className="owned">Owned</span>
@@ -218,10 +223,10 @@ export function StoreView({
                   <td>{product.title}</td>
                   <td className="wrap">{row.detail}</td>
                   <td className="r">
-                    <b>{free && paid(product) && !bought(product, row.owned) ? freePrice(row.priceText) : row.priceText}</b>
+                    <b>{free && addonFree(product) && !bought(product, row.owned) ? freePrice(row.priceText) : row.priceText}</b>
                   </td>
                   <td className="r">
-                    {free && paid(product) ? (
+                    {free && addonFree(product) ? (
                       freeAction(bought(product, row.owned))
                     ) : row.owned ? (
                       <span className="owned">Owned</span>

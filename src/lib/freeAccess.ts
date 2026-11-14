@@ -19,7 +19,7 @@ export function parseFreeAccess(body: unknown): FreeAccess {
   return { on: true, endsAt: ends };
 }
 
-/** "Free until Monday 5:00 PM Eastern", or "Free for now" when there is no end time. */
+/** "Free until Sunday, November 22 at 5:00 PM Eastern", or "Free for now" when there is no end time. */
 export function freeUntilText(access: FreeAccess, now: Date = new Date()): string | null {
   if (!access.on) return null;
   if (!access.endsAt) return "Free for now";
@@ -28,11 +28,13 @@ export function freeUntilText(access: FreeAccess, now: Date = new Date()): strin
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/New_York",
     weekday: "long",
+    month: "long",
+    day: "numeric",
     hour: "numeric",
     minute: "2-digit",
   }).formatToParts(end);
   const pick = (type: string): string => parts.find((part) => part.type === type)?.value ?? "";
-  return `Free until ${pick("weekday")} ${pick("hour")}:${pick("minute")} ${pick("dayPeriod")} Eastern`;
+  return `Free until ${pick("weekday")}, ${pick("month")} ${pick("day")} at ${pick("hour")}:${pick("minute")} ${pick("dayPeriod")} Eastern`;
 }
 
 /** True while free access is on and has not run out. */
@@ -50,8 +52,10 @@ export function freeGrantedIds(
   const granted = new Set<string>();
   if (!freeAccessActive(access, now)) return granted;
   for (const product of products) {
-    if (product.entitlementIds.length === 0) continue;
     if (product.staffOnly) continue;
+    // A game with add-ons (Margin of Victory packs) is opened for signed-in accounts too,
+    // even though the base product carries no entitlement of its own.
+    if (product.entitlementIds.length === 0 && !product.addonGame) continue;
     if (product.entitlementIds.some((id) => entitlements[id] === "owned")) continue;
     granted.add(product.id);
   }

@@ -2,7 +2,7 @@
 
 ## 0.7.4
 
-- During free access the store shows every game as free and drops the Buy buttons.
+- During free access the store shows every game and every Margin of Victory pack as free, with the usual price struck through and no Buy buttons. The end time now includes the date ("Free until Sunday, November 22 at 5:00 PM Eastern"), also on Home.
 
 ## 0.7.3
 

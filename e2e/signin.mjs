@@ -189,6 +189,13 @@ async function main() {
     if (freeOn) {
       if (!/Free until/.test(text) && !/Free for now/.test(text)) throw new Error("free access is on but the Store shows no Free until text");
       if (await card.getByRole("button", { name: /^Buy/ }).count()) throw new Error("free access is on but the Store still offers Buy");
+      // Margin of Victory packs are opened by free access too: Free, never Buy or Choose.
+      const packs = launcherPage.locator("tr").filter({ hasText: "Complete Collection" }).first();
+      if (await packs.count()) {
+        const packText = (await packs.textContent()) ?? "";
+        if (!/Free/.test(packText)) throw new Error("free access is on but the Margin of Victory packs do not say Free");
+        if (await packs.getByRole("button", { name: /^(Buy|Choose)/ }).count()) throw new Error("free access is on but the Margin of Victory packs still offer Buy");
+      }
       const library = await launcherPage.getByRole("button", { name: "Library" }).first();
       await library.click();
       await sleep(1000);

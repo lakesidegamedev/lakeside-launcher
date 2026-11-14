@@ -145,3 +145,16 @@ describe("countdown maths", () => {
     expect(remaining("2026-11-15T22:00:00Z", new Date("2026-11-16T00:00:00Z"))).toEqual({ days: 0, hours: 0, minutes: 0, seconds: 0 });
   });
 });
+
+describe("free copy comes from the live switch", () => {
+  it("a free event and a free slide state the live end, never the feed's day", () => {
+    const feedWith = f(
+      [ev({ id: "fw", kind: "free", target: undefined, line: "Everything is free until Monday at 5:00 PM Eastern.", startsAt: "2026-11-13T00:00:00Z", endsAt: "2026-11-17T22:00:00Z" })],
+      [slide("fs", { kind: "free", game: "studio", line: "Free until Monday.", tile: "Everything is free until Monday", action: { type: "play", target: "cw" } })],
+    );
+    const out = chooseShowcase(feedWith, player, new Date("2026-11-14T12:00:00Z"), on("2026-11-22T22:00:00Z"));
+    const text = JSON.stringify(out);
+    expect(text).not.toContain("Monday");
+    expect(out.events[0]?.line).toBe("Free until Sunday, November 22 at 5:00 PM Eastern.");
+  });
+});
