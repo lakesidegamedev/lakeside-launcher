@@ -71,6 +71,9 @@ export function StoreView({
       </small>
     </>
   );
+  // Free access shows up in the entitlements as owned. For the store that is not owning:
+  // the game is free for now, so it gets the Free treatment, not Owned.
+  const bought = (product: Product, owned: boolean): boolean => owned && !(free && freeIds?.has(product.id));
   const freeAction = (owned: boolean): JSX.Element =>
     owned ? (
       <span className="owned">Owned</span>
@@ -159,7 +162,7 @@ export function StoreView({
                 </td>
                 <td>
                   <b>
-                    {free && paid(product) && owned !== "owned"
+                    {free && paid(product) && !bought(product, owned === "owned")
                       ? freePrice(priceSummary(product, catalog, entitlements).replace(/^Free to play, /, ""))
                       : priceSummary(product, catalog, entitlements)}
                   </b>
@@ -215,11 +218,11 @@ export function StoreView({
                   <td>{product.title}</td>
                   <td className="wrap">{row.detail}</td>
                   <td className="r">
-                    <b>{free && paid(product) && !row.owned ? freePrice(row.priceText) : row.priceText}</b>
+                    <b>{free && paid(product) && !bought(product, row.owned) ? freePrice(row.priceText) : row.priceText}</b>
                   </td>
                   <td className="r">
                     {free && paid(product) ? (
-                      freeAction(row.owned)
+                      freeAction(bought(product, row.owned))
                     ) : row.owned ? (
                       <span className="owned">Owned</span>
                     ) : (
@@ -251,14 +254,14 @@ export function StoreView({
                     </td>
                     <td className="r">
                       <b>
-                        {free && paid(product) && !product.entitlementIds.some((id) => entitlements[id] === "owned")
+                        {free && paid(product) && !bought(product, product.entitlementIds.some((id) => entitlements[id] === "owned"))
                           ? freePrice(formatPrice(edition.priceCents, edition.currency))
                           : formatPrice(edition.priceCents, edition.currency)}
                       </b>
                     </td>
                     <td className="r">
                       {free && paid(product) ? (
-                        freeAction(product.entitlementIds.some((id) => entitlements[id] === "owned"))
+                        freeAction(bought(product, product.entitlementIds.some((id) => entitlements[id] === "owned")))
                       ) : product.entitlementIds.some((id) => entitlements[id] === "owned") ? (
                         <span className="owned">Owned</span>
                       ) : (
