@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.4
+
+- During free access the store shows every game as free and drops the Buy buttons.
+
 ## 0.7.3
 
 - Internal preview polish. Nothing changes for players.
