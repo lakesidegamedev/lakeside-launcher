@@ -126,10 +126,10 @@ describe("Home helpers", () => {
     subscriptionsAvailable: true,
   };
   it("names what purchases cover from the live catalog, without claiming a tier it cannot know", () => {
-    const both = accountSummary("kepler", catalog, { "corporate-warfare": "owned", complete: "owned" }, "Free until Monday 5:00 PM Eastern");
+    const both = accountSummary("kepler", catalog, { "corporate-warfare": "owned", complete: "owned" }, "Free until Sunday, November 22 at 5:00 PM Eastern");
     expect(both.access).toBe("Supporter+ or Champion");
     expect(both.lines[0]).toBe("Corporate Warfare, Margin of Victory Complete Collection");
-    expect(both.lines[1]).toBe("Free until Monday 5:00 PM Eastern");
+    expect(both.lines[1]).toBe("Free until Sunday, November 22 at 5:00 PM Eastern");
     expect(accountSummary("kepler", catalog, { complete: "owned" }, null).access).toBe("Supporter");
     const none = accountSummary("kepler", catalog, {}, null);
     expect(none.access).toBe("");

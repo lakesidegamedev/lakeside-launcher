@@ -4,9 +4,9 @@ import { CATALOG } from "../catalog";
 import { CATALOG_SNAPSHOT } from "../lib/catalogSnapshot";
 import { StoreView } from "./StoreView";
 
-// Margin of Victory (electioneer) has no paid entitlement, so free access does not open its
-// packs: they stay on sale with their Buy buttons. The paid games are what the switch covers.
-const products = CATALOG.filter((product) => !product.companionOf && !product.staffOnly && product.id !== "electioneer");
+// Free access opens Margin of Victory packs too, although the base product has no entitlement:
+// its add-on rows get the same Free treatment as the games.
+const products = CATALOG.filter((product) => !product.companionOf && !product.staffOnly);
 const noop = (): void => undefined;
 
 function render(freeWeek: string | null, signedIn: boolean): string {
@@ -33,7 +33,7 @@ const buyButton = />Buy</;
 
 describe("store tab during free access", () => {
   it("every paid game row says Free with its usual price struck", () => {
-    const html = render("Free until Sunday 5:00 PM Eastern", true);
+    const html = render("Free until Sunday, November 22 at 5:00 PM Eastern", true);
     expect(html).not.toContain("Free right now");
     expect(html).toMatch(/Free <small class="muted"><s>/);
   });
@@ -45,8 +45,8 @@ describe("store tab during free access", () => {
         live
         entitlements={{ "corporate-warfare": "owned", "ahd-singleplayer": "owned", "ahd-client": "owned" }}
         freeIds={new Set(["ahd", "corporate-warfare"])}
-        freeText="Free until Sunday 5:00 PM Eastern"
-        freeWeek="Free until Sunday 5:00 PM Eastern"
+        freeText="Free until Sunday, November 22 at 5:00 PM Eastern"
+        freeWeek="Free until Sunday, November 22 at 5:00 PM Eastern"
         products={products}
         signedIn
         onBuy={noop}
@@ -58,6 +58,41 @@ describe("store tab during free access", () => {
     );
     expect(html).toContain("<s>$14.99</s>");
     expect(html).not.toContain(">Owned<");
+  });
+
+  it("Margin of Victory packs show Free with the price struck, no Buy or Choose", () => {
+    const mov = CATALOG.filter((product) => product.id === "electioneer");
+    const html = renderToStaticMarkup(
+      <StoreView
+        catalog={CATALOG_SNAPSHOT}
+        live
+        entitlements={{}}
+        freeIds={new Set(["electioneer"])}
+        freeText="Free until Sunday, November 22 at 5:00 PM Eastern"
+        freeWeek="Free until Sunday, November 22 at 5:00 PM Eastern"
+        products={mov}
+        signedIn
+        onBuy={noop}
+        onSignIn={noop}
+        onOpenUrl={noop}
+        onOpenGame={noop}
+        onRefresh={noop}
+      />,
+    );
+    expect(html).toContain("Complete Collection");
+    expect(html).toMatch(/Free <small class="muted"><s>/);
+    expect(html).not.toMatch(buyButton);
+    expect(html).not.toContain(">Choose<");
+  });
+
+  it("Margin of Victory packs ask a signed-out player to sign in", () => {
+    const mov = CATALOG.filter((product) => product.id === "electioneer");
+    const html = renderToStaticMarkup(
+      <StoreView catalog={CATALOG_SNAPSHOT} live entitlements={{}} freeWeek="Free for now" products={mov} signedIn={false}
+        onBuy={noop} onSignIn={noop} onOpenUrl={noop} onOpenGame={noop} onRefresh={noop} />,
+    );
+    expect(html).toContain("Sign in to play free");
+    expect(html).not.toMatch(buyButton);
   });
 
   it("a staff-only product is never shown as free", () => {
@@ -85,7 +120,7 @@ describe("store tab during free access", () => {
   });
 
   it("signed out: no Buy buttons, prices struck, asks to sign in", () => {
-    const html = render("Free until Sunday 5:00 PM Eastern", false);
+    const html = render("Free until Sunday, November 22 at 5:00 PM Eastern", false);
     expect(html).not.toMatch(buyButton);
     expect(html).not.toContain(">Choose<");
     expect(html).toContain("Sign in to play free");
@@ -96,7 +131,7 @@ describe("store tab during free access", () => {
   });
 
   it("signed in: no Buy buttons or sign-in prompts", () => {
-    const html = render("Free until Sunday 5:00 PM Eastern", true);
+    const html = render("Free until Sunday, November 22 at 5:00 PM Eastern", true);
     expect(html).not.toMatch(buyButton);
     expect(html).not.toContain("Sign in to play free");
     expect(html).toContain("Every game is free to play right now.");

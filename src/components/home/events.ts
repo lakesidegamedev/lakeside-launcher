@@ -5,7 +5,7 @@
 // choice is recomputed from the clock, so an event ending or starting changes
 // the layout without a restart.
 
-import { freeAccessActive, type FreeAccess } from "../../lib/freeAccess";
+import { freeAccessActive, freeUntilText, type FreeAccess } from "../../lib/freeAccess";
 import {
   GAMES,
   buildSlides,
@@ -120,6 +120,8 @@ export interface HomeShowcase {
   slides: ShowcaseSlide[];
 }
 
+const WEEKDAY = /\b(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b/;
+
 export function chooseShowcase(
   feed: HomeFeed | null | undefined,
   player: PlayerState,
@@ -131,7 +133,19 @@ export function chooseShowcase(
     freeAccess: freeAccessActive(freeAccess, now),
     liveEventIds: new Set(events.map((event) => event.id)),
   });
-  return { layout: events.length > 0 ? "split" : "film", events, slides };
+  // The feed's free copy is written ahead of time and may name the wrong day. The end
+  // text always comes from the live switch.
+  const endText = freeUntilText(freeAccess, now);
+  const liveLine = (line: string): string => (endText ? `${endText}.` : line);
+  return {
+    layout: events.length > 0 ? "split" : "film",
+    events: events.map((event) => (event.kind === "free" ? { ...event, line: liveLine(event.line) } : event)),
+    slides: slides.map((entry) =>
+      entry.slide.kind === "free"
+        ? { ...entry, slide: { ...entry.slide, line: liveLine(entry.slide.line), ...(entry.slide.tile && WEEKDAY.test(entry.slide.tile) ? { tile: "Everything is free" } : {}) } }
+        : entry,
+    ),
+  };
 }
 
 /** Time left until `target`, split for the countdown boxes. Never negative. */
