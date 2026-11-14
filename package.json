@@ -1,7 +1,7 @@
 {
   "name": "lakeside-launcher",
   "private": true,
-  "version": "0.7.3",
+  "version": "0.7.4",
   "description": "The Lakeside Games launcher: library, store and account shell for web and native games",
   "license": "UNLICENSED",
   "type": "module",
