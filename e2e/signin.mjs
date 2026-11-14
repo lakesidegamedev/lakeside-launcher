@@ -185,6 +185,7 @@ async function main() {
     await launcherPage.getByRole("button", { name: "Store", exact: true }).first().click();
     const card = await cardFor("Corporate Warfare");
     const text = (await card.textContent()) ?? "";
+    await shoot(launcherPage, "10a-store-tab");
     if (freeOn) {
       if (!/Free until/.test(text) && !/Free for now/.test(text)) throw new Error("free access is on but the Store shows no Free until text");
       if (await card.getByRole("button", { name: /^Buy/ }).count()) throw new Error("free access is on but the Store still offers Buy");
