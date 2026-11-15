@@ -167,19 +167,54 @@ pub fn linux_appimage_path(root: &Path, product_id: &str) -> Option<PathBuf> {
     linux_appimage_relative(product_id).map(|relative| root.join(relative))
 }
 
-/// Parse "1.9.0", "v1.9.0" or "1.9.0-preview.2" into three numeric parts.
-fn parse_version(value: &str) -> [u64; 3] {
+/// Parse "1.9.0", "v1.9.0" or "1.9.0-preview.2" into three numeric parts and the pre-release
+/// parts after the dash (build metadata after "+" is dropped).
+fn parse_version(value: &str) -> ([u64; 3], Vec<&str>) {
     let trimmed = value.trim().trim_start_matches(['v', 'V']);
-    let head = trimmed.split(['-', '+']).next().unwrap_or("");
+    let trimmed = trimmed.split('+').next().unwrap_or("");
+    let (head, tail) = trimmed.split_once('-').unwrap_or((trimmed, ""));
     let mut parts = [0u64; 3];
     for (slot, piece) in parts.iter_mut().zip(head.split('.')) {
         *slot = piece.trim().parse().unwrap_or(0);
     }
-    parts
+    let pre = if tail.is_empty() {
+        Vec::new()
+    } else {
+        tail.split('.').collect()
+    };
+    (parts, pre)
 }
 
+/// Semver order: numbers first, then a release is newer than any pre-release of the same
+/// numbers ("1.0.0" over "1.0.0-preview.5"), and pre-releases compare part by part.
 pub fn compare_versions(left: &str, right: &str) -> Ordering {
-    parse_version(left).cmp(&parse_version(right))
+    let (a, ap) = parse_version(left);
+    let (b, bp) = parse_version(right);
+    match a.cmp(&b) {
+        Ordering::Equal => {}
+        other => return other,
+    }
+    match (ap.is_empty(), bp.is_empty()) {
+        (true, true) => return Ordering::Equal,
+        (true, false) => return Ordering::Greater,
+        (false, true) => return Ordering::Less,
+        _ => {}
+    }
+    for i in 0..ap.len().max(bp.len()) {
+        let (Some(x), Some(y)) = (ap.get(i), bp.get(i)) else {
+            return ap.len().cmp(&bp.len());
+        };
+        if x == y {
+            continue;
+        }
+        return match (x.parse::<u64>(), y.parse::<u64>()) {
+            (Ok(m), Ok(n)) => m.cmp(&n),
+            (Ok(_), Err(_)) => Ordering::Less,
+            (Err(_), Ok(_)) => Ordering::Greater,
+            _ => x.cmp(y),
+        };
+    }
+    Ordering::Equal
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -573,7 +608,17 @@ mod tests {
         assert_eq!(compare_versions("1.9.0", "1.9.0"), Ordering::Equal);
         assert_eq!(compare_versions("1.10.0", "1.9.9"), Ordering::Greater);
         assert_eq!(compare_versions("v1.9.0", "1.9.0"), Ordering::Equal);
-        assert_eq!(compare_versions("2.0.0-preview.2", "2.0.0"), Ordering::Equal);
+        assert_eq!(compare_versions("2.0.0-preview.2", "2.0.0"), Ordering::Less);
+        assert_eq!(compare_versions("1.0.0", "1.0.0-preview.5"), Ordering::Greater);
+        assert_eq!(
+            compare_versions("1.0.0-preview.10", "1.0.0-preview.9"),
+            Ordering::Greater
+        );
+        assert_eq!(compare_versions("1.0.0+build.2", "1.0.0"), Ordering::Equal);
+        assert_eq!(
+            install_action(Some("1.0.0-preview.5"), "1.0.0"),
+            InstallAction::Update
+        );
         assert_eq!(compare_versions("1.9", "1.9.1"), Ordering::Less);
     }
 
