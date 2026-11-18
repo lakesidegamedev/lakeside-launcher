@@ -299,7 +299,7 @@ pub async fn ahd_achievements(
             achievements: vec![],
         });
     }
-    if response.status() == reqwest::StatusCode::NOT_FOUND {
+    if response.status() == reqwest::StatusCode::NOT_FOUND || response.status().is_redirection() {
         return Ok(Achievements {
             status: "pending".into(),
             achievements: vec![],
