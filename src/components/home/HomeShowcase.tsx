@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import "./home.css";
 import type { FreeAccess } from "../../lib/freeAccess";
 import { chooseShowcase, type LiveEvent } from "./events";
-import { GAME_NAMES, artUrl, fallbackArt } from "./keyart";
+import { GAME_NAMES, KEY_ART, artUrl, fallbackArt } from "./keyart";
 import { keyIntent } from "./pause";
 import {
   resolveAction,
@@ -98,7 +98,7 @@ export function HomeShowcase({ feed, player, freeAccess, onAction, now: nowOverr
   const featured = slides[active];
   const slide = featured?.slide;
   const secondary = featured?.secondary;
-  const remoteArt = slide ? artUrl(slide.art, slide.game) : undefined;
+  const remoteArt = slide ? artUrl(slide.art, slide.game) : "";
 
   const onKey = (event: KeyboardEvent<HTMLElement>) => {
     const intent = keyIntent(event.key, active, count, event.target === event.currentTarget);
@@ -110,7 +110,7 @@ export function HomeShowcase({ feed, player, freeAccess, onAction, now: nowOverr
 
   return (
     <section className="show" aria-label="Featured stories" onKeyDown={onKey} tabIndex={0}>
-      {featured && slide && remoteArt ? (
+      {featured && slide ? (
         <article className="featured-story">
           <div className="feature-copy">
             <span className="feature-series">{GAME_NAMES[slide.game] ?? slide.game}{slide.badge ? ` / ${slide.badge}` : ""}</span>
@@ -125,7 +125,7 @@ export function HomeShowcase({ feed, player, freeAccess, onAction, now: nowOverr
           </div>
           <img
             className="feature-art"
-            src={brokenArt.has(slide.id) ? fallbackArt(slide.game) : remoteArt}
+            src={!remoteArt || remoteArt === "bundled" || brokenArt.has(slide.id) ? fallbackArt(slide.game) || KEY_ART.alpha : remoteArt}
             alt=""
             style={{ objectPosition: `${slide.focus?.x ?? 62}% ${slide.focus?.y ?? 50}%` }}
             onError={() => {

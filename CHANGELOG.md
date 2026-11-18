@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.0
+
+- Home puts featured stories and recently played games first. Browse stories at your own pace, without countdowns or automatic rotation.
+- The Library uses larger game artwork and shows playtime, last played and install status at a glance.
+- Game pages put Play, playtime, achievements, patch notes and installation controls in one place. Playtime is stored on this device for sessions the launcher can observe.
+- Sign in with A House Divided to view earned account achievements. Other native games can show their own achievements when they connect to the launcher.
+
 ## 0.7.6
 
 - Urban Sprawl appears in the game catalog and can be installed and updated by eligible accounts.

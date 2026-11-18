@@ -105,7 +105,7 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid 
 .toast { position: fixed; right: 16px; bottom: 44px; max-width: 420px; padding: 9px 12px; background: var(--plate-2); border: 1px solid var(--line); border-radius: 4px; color: var(--text); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35); }
 
 /* type */
-h1 { font-size: 29px; font-weight: 600; letter-spacing: -0.025em; line-height: 1.15; }
+h1 { font-size: 34px; font-weight: 700; letter-spacing: -0.025em; line-height: 1.15; }
 h1.big { font-size: 24px; }
 h2 { font-size: 18px; font-weight: 600; margin: 24px 0 10px; }
 h3 { font-size: 13.5px; font-weight: 600; margin-bottom: 8px; }
@@ -200,7 +200,7 @@ button.rowlink:hover b { text-decoration: underline; }
   content: "";
   background: linear-gradient(90deg, #141f3a 5%, #141f3ab0 58%, #141f3a40), linear-gradient(0deg, #141f3ae8, transparent 90%);
 }
-.gamehead h1 { font-size: clamp(31px, 4vw, 54px); margin-bottom: 6px; }
+.gamehead h1 { font-size: clamp(34px, 4.6vw, 64px); margin-bottom: 6px; }
 .gamehead p { max-width: 46ch; color: var(--text-2); font-size: 15px; }
 .gamehead .actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .gamehead .owned { display: inline-block; margin-top: 8px; }
@@ -247,9 +247,10 @@ ul.plain li::before { content: "\2022"; color: var(--text-3); margin-right: 7px;
   flex-direction: column;
   background: var(--ground-2);
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: 8px;
   min-width: 0;
 }
+.library-game:focus-within, .library-game:hover { border-color: var(--text-3); }
 .library-cover {
   isolation: isolate;
   position: relative;
@@ -259,11 +260,11 @@ ul.plain li::before { content: "\2022"; color: var(--text-3); margin-right: 7px;
   aspect-ratio: 16 / 8;
   padding: 14px 16px;
   overflow: hidden;
-  border-radius: 4px 4px 0 0;
+  border-radius: 7px 7px 0 0;
   text-align: left;
   background: var(--plate);
 }
-.library-cover img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: -2; }
+.library-cover img { transition: transform 220ms ease-out; position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: -2; }
 .library-cover::before {
   content: "";
   position: absolute;
@@ -271,7 +272,12 @@ ul.plain li::before { content: "\2022"; color: var(--text-3); margin-right: 7px;
   background: linear-gradient(0deg, #0a1328 2%, #0a13287d 44%, transparent 85%);
   z-index: -1;
 }
-.library-cover span { font-size: 22px; font-weight: 600; }
+.library-cover span { font-size: clamp(21px, 2.1vw, 27px); font-weight: 700; line-height: 1.1; }
+.library-cover:hover img { transform: scale(1.035); }
+@media (prefers-reduced-motion: reduce) {
+  .library-cover img { transition: none; }
+  .library-cover:hover img { transform: none; }
+}
 .library-cover:hover span { text-decoration: underline; text-underline-offset: 4px; }
 .library-game-body { flex: 1; padding: 12px 16px 14px; }
 .library-game-info { display: grid; gap: 4px; }
