@@ -299,6 +299,12 @@ pub async fn ahd_achievements(
             achievements: vec![],
         });
     }
+    if response.status() == reqwest::StatusCode::NOT_FOUND {
+        return Ok(Achievements {
+            status: "pending".into(),
+            achievements: vec![],
+        });
+    }
     let body = response
         .error_for_status()
         .map_err(|_| "Achievement sync is unavailable.")?

@@ -299,7 +299,7 @@ export interface Achievement {
 }
 
 export interface Achievements {
-  status: "local" | "synced" | "unsupported" | "unlinked" | "expired";
+  status: "local" | "synced" | "unsupported" | "unlinked" | "expired" | "pending";
   achievements: Achievement[];
 }
 

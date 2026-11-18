@@ -54,6 +54,7 @@ export function GameActivity({ productId, session, playtime }: {
     : ahd && !session ? "Sign in with your linked account to sync A House Divided achievements."
     : failed ? (result ? "Couldn’t refresh. Showing the last successful sync." : "Couldn’t load achievements. Try refreshing.")
     : !result ? "Loading achievements…"
+    : result.status === "pending" ? "A House Divided achievement sync is rolling out."
     : result.status === "unlinked" ? "Sign in with A House Divided to sync your game achievements."
     : result.status === "expired" ? "Your session has expired. Sign in again to sync."
     : result.status === "unsupported" ? "This game hasn’t connected achievements yet."
