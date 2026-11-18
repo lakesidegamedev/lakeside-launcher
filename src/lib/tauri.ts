@@ -284,3 +284,31 @@ export async function fetchFreeAccess(): Promise<FreeAccess> {
   if (!response.ok) return FREE_ACCESS_OFF;
   return parseFreeAccess(await response.json());
 }
+
+export interface Playtime {
+  milliseconds: number;
+  lastPlayedAt: number;
+  running: boolean;
+}
+
+export interface Achievement {
+  id: string;
+  name: string;
+  description: string;
+  earnedAt: string | null;
+}
+
+export interface Achievements {
+  status: "local" | "synced" | "unsupported" | "unlinked" | "expired" | "pending";
+  achievements: Achievement[];
+}
+
+export function readPlaytime(): Promise<Record<string, Playtime>> {
+  return invoke("playtime");
+}
+
+export function readAchievements(productId: string): Promise<Achievements> {
+  return productId === "ahd"
+    ? invoke("ahd_achievements")
+    : invoke("local_achievements", { productId });
+}

@@ -31,6 +31,8 @@ import {
   openExternal,
   openInstallFolder,
   openWebGame,
+  readPlaytime,
+  type Playtime,
   getInstallRoot as getInstallRootSetting,
   setInstallRoot as setInstallRootSetting,
   uninstallProduct,
@@ -110,6 +112,7 @@ export function App(): JSX.Element {
   });
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [playtime, setPlaytime] = useState<Record<string, Playtime>>({});
   const [ready, setReady] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [updateProgress, setUpdateProgress] = useState<number | null>(null);
@@ -156,6 +159,26 @@ export function App(): JSX.Element {
       cancelled = true;
     };
   }, [client]);
+
+  useEffect(() => {
+    if (!isDesktop()) return;
+    let cancelled = false;
+    let request = 0;
+    const refresh = () => {
+      const id = ++request;
+      void readPlaytime().then((next) => {
+        if (!cancelled && id === request) setPlaytime(next);
+      }).catch(() => {});
+    };
+    refresh();
+    window.addEventListener("focus", refresh);
+    const timer = window.setInterval(refresh, 5_000);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", refresh);
+      window.clearInterval(timer);
+    };
+  }, []);
 
   // The live store catalog.
   useEffect(() => {
@@ -828,8 +851,9 @@ export function App(): JSX.Element {
       detail?.sizeBytes ??
       artifact?.size ??
       (desktop?.installSizeMb ? desktop.installSizeMb * 1024 * 1024 : null);
-    const lastPlayed = detail?.lastPlayedAt
-      ? new Date(detail.lastPlayedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+    const lastPlayedAt = playtime[product.id]?.lastPlayedAt ?? detail?.lastPlayedAt;
+    const lastPlayed = lastPlayedAt
+      ? new Date(lastPlayedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })
       : "-";
     return {
       product,
@@ -841,6 +865,7 @@ export function App(): JSX.Element {
       actionDisabled,
       sizeText: desktop ? formatBytes(sizeBytes) : "Web",
       lastPlayed,
+      playtime: playtime[product.id],
       installedVersion,
       latestVersion: latest,
       updateAvailable,
@@ -911,6 +936,7 @@ export function App(): JSX.Element {
         }}
       />
 
+      <div className="workspace">
       {updateInfo ? (
         <div className="update-bar" role="status">
           <span>
@@ -977,7 +1003,9 @@ export function App(): JSX.Element {
           />
         ) : view === "library" && selectedRow ? (
           <GameView
+            key={selectedRow.product.id}
             row={selectedRow}
+            session={session}
             entitlements={entitlements}
             catalog={catalog}
             notes={selectedRow.desktop ? (notes[selectedRow.desktop.id] ?? []) : []}
@@ -1088,6 +1116,7 @@ export function App(): JSX.Element {
           />
         )}
       </main>
+      </div>
 
       {notice ? (
         <div className="toast" role="status">

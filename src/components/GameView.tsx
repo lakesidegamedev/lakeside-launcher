@@ -11,10 +11,12 @@ import {
   type LiveCatalog,
 } from "../lib/liveCatalog";
 import { formatDay, plainNotes } from "../lib/format";
-import { Thumb } from "./Thumb";
+import type { Session } from "../platform/client";
+import { GameActivity } from "./GameActivity";
 
 interface Props {
   row: GameRow;
+  session: Session | null;
   entitlements: Entitlements;
   catalog: LiveCatalog | null;
   notes: readonly PatchNote[];
@@ -44,6 +46,7 @@ const WHERE: Record<string, string> = {
 
 export function GameView({
   row,
+  session,
   entitlements,
   catalog,
   notes,
@@ -91,16 +94,13 @@ export function GameView({
         </button>{" "}
         / <span>{row.title}</span>
       </div>
-      <div className="two">
-        <div>
-          <div className="gamehead">
-            <Thumb product={product} large />
+      <div className="gamehead">
+            {product.art ? <img className="game-art" src={product.art} alt="" /> : null}
             <div className="grow">
               <h1>
-                <span className="dot" style={{ background: product.accent }} /> {row.title}
-                <span className={`state inline ${row.state.tone}`}>{row.state.label}</span>
+                {row.title}
               </h1>
-              <div className="sub">{row.blurb}</div>
+              <p>{row.blurb}</p>
               {row.freeText ? <div className="sub owned">{row.freeText}</div> : null}
             </div>
             <div className="actions">
@@ -124,6 +124,15 @@ export function GameView({
               ) : null}
             </div>
           </div>
+
+      <div className="two game-layout">
+        <div>
+          <GameActivity
+            key={session ? `${session.provider}:${session.username}` : "guest"}
+            session={session}
+            productId={product.id}
+            playtime={row.playtime}
+          />
 
           {shownNotes.length > 0 ? (
             <>

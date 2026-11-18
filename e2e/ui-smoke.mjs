@@ -29,9 +29,9 @@ const slides = [
   slide("smoke-mov", "mov", "121 elections in 14 countries", { priority: 2, tile: "121 elections" }),
   slide("smoke-free", "studio", "Everything is free to play", { kind: "free", priority: 3, tile: "Free this weekend", art: "bundled:alpha" }),
 ];
-// Layout B: no events list at all, like a feed from before 0.7.0.
+// A feed without scheduled events.
 const feedWithoutEvents = JSON.stringify({ version: 1, slides });
-// Layout C: one countdown that is live until 2099.
+// A scheduled announcement with a target date.
 const feedWithEvent = JSON.stringify({
   version: 1,
   slides,
@@ -93,25 +93,24 @@ try {
 const text = async (page) => (await page.locator("body").innerText()).replace(/\s+/g, " ").toLowerCase();
 const has = (body, wanted) => body.includes(wanted.toLowerCase());
 
-  // Layout B: the filmstrip, with five-tile strip and no live panels.
+  // Featured stories without scheduled events.
   let page = await open();
   await page.waitForSelector(".show", { timeout: 15000 });
   let body = await text(page);
   check(await page.locator("nav.tabs .tab").first().innerText() === "Home", "Home is the first tab");
   check(await page.locator("nav.tabs .tab.on").innerText() === "Home", "Home is the default screen");
-  check((await page.locator(".show").getAttribute("data-layout")) === "film", "No events: Home shows the filmstrip layout");
-  check((await page.locator(".show .live").count()) === 0, "No events: no live panels");
+  check((await page.locator(".show .feature-events").count()) === 0, "No events: no live panels");
   check(has(body, "Corporate Warfare 2.0 is out"), "Home showcase shows the first slide");
   check(has(body, "Jump back in"), "Home has Jump back in");
   check(has(body, "What changed"), "Home has What changed");
-  check((await page.locator(".show .tile").count()) >= 2, "Filmstrip tiles are shown");
+  check((await page.locator(".show .feature-link").count()) >= 2, "Story selectors are shown");
   // The free-access answer arrives after first paint; wait for its slide to join, then open it by its tile.
-  await page.waitForSelector(".show .tile[aria-label='Show: Free this weekend']", { timeout: 15000, state: "attached" });
-  await page.locator(".show .tile[aria-label='Show: Free this weekend']").click();
+  await page.waitForSelector(".show .feature-link[aria-label='Show: Free this weekend']", { timeout: 15000, state: "attached" });
+  await page.locator(".show .feature-link[aria-label='Show: Free this weekend']").click();
   check(has(await text(page), "Everything is free to play"), "free-to-play slide shows while the switch is on");
   // Keyboard: focus the showcase, Right goes to the next slide (wraps), Left goes back.
   await page.locator(".show").focus();
-  const current = async () => page.locator(".show .tile[aria-current='true']").getAttribute("aria-label");
+  const current = async () => page.locator(".show .feature-link[aria-current='true']").getAttribute("aria-label");
   const before = await current();
   await page.keyboard.press("ArrowRight");
   const after = await current();
@@ -121,23 +120,23 @@ const has = (body, wanted) => body.includes(wanted.toLowerCase());
   await shot(page, "home");
   await page.context().close();
 
-  // Layout C: a live event shows its panel beside the showcase.
+  // A scheduled event shows its announcement without a countdown.
   page = await open(undefined, feedWithEvent);
-  await page.waitForSelector(".show[data-layout='split']", { timeout: 15000 });
+  await page.waitForSelector(".event-item", { timeout: 15000 });
   body = await text(page);
-  check((await page.locator(".show .live .lp").count()) === 1, "A live event: one live panel");
+  check((await page.locator(".show .event-item").count()) === 1, "A live event: one live panel");
   check(has(body, "A House Divided 1.20: the 2027 world"), "The live panel shows the event headline");
-  check((await page.locator(".show .live .cd").count()) === 1, "The countdown event shows its countdown");
-  check((await page.locator(".show .tile").count()) === 0, "A live event: no filmstrip");
+  check((await page.getByRole("timer").count()) === 0, "The event has no countdown timer");
+  check((await page.locator(".show .feature-link").count()) >= 2, "Events retain the story selectors");
   await shot(page, "home-events");
 
   await page.locator("nav.tabs .tab", { hasText: "Library" }).click();
-  await page.waitForSelector("table");
+  await page.waitForSelector(".library-game");
   body = await text(page);
   check(has(body, "A House Divided") && has(body, "Margin of Victory"), "Library lists the games");
   await shot(page, "library");
 
-  await page.locator("table tbody tr").first().locator("b").first().click();
+  await page.getByRole("button", { name: "A House Divided", exact: true }).click();
   await page.waitForTimeout(300);
   body = await text(page);
   check(has(body, "Where you can play"), "Game page opens");

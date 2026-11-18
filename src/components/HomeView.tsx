@@ -60,7 +60,7 @@ export function HomeView({
             <div className="jb">
               {continueList.map(({ row, playedAt }) => {
                 const game = gameKeyForRow(row.product.id);
-                const art = game ? KEY_ART[game] : undefined;
+                const art = (game ? KEY_ART[game] : undefined) ?? row.product.art;
                 return (
                   <div className={`jt ${accent(game)}`} key={row.product.id}>
                     <div className="jart" style={art ? { backgroundImage: `url(${JSON.stringify(art)})`, backgroundPosition: "58% 45%" } : undefined} />
@@ -79,7 +79,7 @@ export function HomeView({
                         {row.updateAvailable && row.latestVersion ? (
                           <span className="upd">{row.latestVersion} ready</span>
                         ) : (
-                          `Installed ${row.installedVersion ?? ""}`
+                          row.installedVersion ? `Installed ${row.installedVersion}` : "Web game"
                         )}
                       </small>
                     </button>
@@ -151,9 +151,6 @@ export function HomeView({
                     <b>{account.name}</b>
                     <small>{account.access ? `Access matches ${account.access}` : "No supporter tier on this account"}</small>
                   </div>
-                  <button type="button" className="btn sm" onClick={onAccount}>
-                    Account
-                  </button>
                 </div>
                 <ul>
                   {account.lines.map((line) => (
