@@ -35,8 +35,8 @@ describe("free access", () => {
     const merged = withFreeAccess(live, {}, CATALOG, now);
     for (const product of paid) expect(merged[product.entitlementIds[0]!]).toBe("owned");
   });
-  it("never opens a staff-only preview", () => {
-    expect(freeGrantedIds(live, {}, CATALOG, now).has("urban-sprawl")).toBe(false);
-    expect(withFreeAccess(live, {}, CATALOG, now)["urban-sprawl"]).toBeUndefined();
+  it("includes Urban Sprawl during free access", () => {
+    expect(freeGrantedIds(live, {}, CATALOG, now).has("urban-sprawl")).toBe(true);
+    expect(withFreeAccess(live, {}, CATALOG, now)["urban-sprawl"]).toBe("owned");
   });
 });

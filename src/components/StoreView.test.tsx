@@ -125,8 +125,7 @@ describe("store tab during free access", () => {
   });
 
   it("a staff-only product is never shown as free", () => {
-    const staff = CATALOG.filter((product) => product.staffOnly);
-    expect(staff.length).toBeGreaterThan(0);
+    const staff = [{ ...products[0]!, staffOnly: true }];
     const html = renderToStaticMarkup(
       <StoreView
         catalog={CATALOG_SNAPSHOT}

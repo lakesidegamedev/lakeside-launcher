@@ -166,35 +166,26 @@ describe("platform helpers", () => {
   });
 });
 
-describe("Urban Sprawl staff-only preview", () => {
-  const staff: Entitlements = { "urban-sprawl": "owned" };
+describe("Urban Sprawl", () => {
+  const owner: Entitlements = { "urban-sprawl": "owned" };
 
-  it("is wired like a paid native game with a handoff", () => {
+  it("uses the paid store product, installer and launcher handoff", () => {
     const entry = product("urban-sprawl");
-    expect(entry.staffOnly).toBe(true);
     expect(entry.entitlementIds).toEqual(["urban-sprawl"]);
     expect(entry.handoffClientId).toBe("urban-sprawl-desktop");
     expect(entry.authenticatedDownload).toBe(true);
     expect(executableFor(entry, "windows")).toBe("Programs/Urban Sprawl/urban-sprawl.exe");
-    expect(entry.liveId).toBeNull();
+    expect(entry.liveId).toBe("urban-sprawl");
+    expect(entry.storeUrl).toBe("https://lakesidegames.net/store/urban-sprawl/");
   });
 
-  it("leaves no trace without the grant: signed out, owning other games, or refunded", () => {
-    for (const ents of [{}, owned, { "corporate-warfare": "owned" }, { "urban-sprawl": "refunded" }] as Entitlements[]) {
-      expect(visibleProducts(ents).map((entry) => entry.id)).not.toContain("urban-sprawl");
+  it("appears in the catalog for everyone and in the library for owners", () => {
+    for (const ents of [{}, owned, { "urban-sprawl": "refunded" }] as Entitlements[]) {
+      expect(visibleProducts(ents).map((entry) => entry.id)).toContain("urban-sprawl");
       expect(libraryProducts(ents).map((entry) => entry.id)).not.toContain("urban-sprawl");
+      expect(canLaunchDesktop(product("urban-sprawl"), ents)).toBe(false);
     }
-  });
-
-  it("shows for an account that holds the grant", () => {
-    expect(visibleProducts(staff).map((entry) => entry.id)).toContain("urban-sprawl");
-    expect(libraryProducts(staff).map((entry) => entry.id)).toContain("urban-sprawl");
-    expect(canLaunchDesktop(product("urban-sprawl"), staff)).toBe(true);
-  });
-
-  it("never offers Buy: no live product id and no store page of its own", () => {
-    const entry = product("urban-sprawl");
-    expect(entry.liveId).toBeNull();
-    expect(entry.storeUrl).not.toContain("/store/");
+    expect(libraryProducts(owner).map((entry) => entry.id)).toContain("urban-sprawl");
+    expect(canLaunchDesktop(product("urban-sprawl"), owner)).toBe(true);
   });
 });

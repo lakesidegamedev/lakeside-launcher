@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.6
+
+- Urban Sprawl appears in the game catalog and can be installed and updated by eligible accounts.
+
+## 0.7.5
+
+- Stable releases update an installed preview of the same version.
+
 ## 0.7.4
 
 - During free access the store shows every game and every Margin of Victory pack as free, with the usual price struck through and no Buy buttons. The end time now includes the date ("Free until Sunday, November 22 at 5:00 PM Eastern"), also on Home.
