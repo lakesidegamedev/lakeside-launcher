@@ -54,12 +54,12 @@ export function continuePlaying(
   limit = 3,
 ): ContinueEntry[] {
   const entries = rows
-    .filter((row) => row.desktop !== null && row.installedVersion !== null)
+    .filter((row) => (row.desktop !== null && row.installedVersion !== null) || (row.hasWeb && !!row.playtime?.lastPlayedAt))
     .map((row) => {
       const id = row.desktop?.id ?? "";
       return {
         row,
-        playedAt: details[id]?.lastPlayedAt ?? null,
+        playedAt: row.playtime?.lastPlayedAt ?? details[id]?.lastPlayedAt ?? null,
         installedAt: installed[id]?.installedAt ?? 0,
       };
     });

@@ -1,3 +1,4 @@
+mod activity;
 // Lakeside launcher backend.
 //
 // Security posture:
@@ -516,7 +517,7 @@ async fn launch_product(
 
     let root = install_root(&app);
     let binary = resolve_game_binary(&root, &product_id, &executable)?;
-    spawn_game(&app, &binary, handoff_client_id.as_deref()).await?;
+    spawn_game(&app, &product_id, &binary, handoff_client_id.as_deref()).await?;
     shell::record_played(&app, &product_id);
     Ok(())
 }
@@ -526,6 +527,7 @@ async fn launch_product(
 /// handoff code.
 async fn spawn_game(
     app: &AppHandle,
+    product_id: &str,
     binary: &Path,
     handoff_client_id: Option<&str>,
 ) -> Result<(), String> {
@@ -533,13 +535,27 @@ async fn spawn_game(
         Some(client_id) => Some(fetch_handoff_code(app, client_id).await),
         None => None,
     };
-    spawn_game_process(binary, handoff_client_id.map(|_| code.flatten())).map(|_| ())
+    let path = activity::achievement_path(app, product_id);
+    let child = start_game_process(
+        binary,
+        handoff_client_id.map(|_| code.flatten()),
+        path.as_deref(),
+    )?;
+    activity::watch_process(app, product_id, child);
+    Ok(())
 }
 
 /// Start the binary detached. `handoff` is None for a game that did not opt in;
 /// Some(code) gives it the launcher environment, with the code when signed in.
-/// Returns the process id.
 pub fn spawn_game_process(binary: &Path, handoff: Option<Option<String>>) -> Result<u32, String> {
+    start_game_process(binary, handoff, None).map(|child| child.id())
+}
+
+fn start_game_process(
+    binary: &Path,
+    handoff: Option<Option<String>>,
+    achievement_path: Option<&Path>,
+) -> Result<std::process::Child, String> {
     let working_dir = binary
         .parent()
         .ok_or_else(|| "The game executable has no parent directory.".to_string())?
@@ -553,6 +569,10 @@ pub fn spawn_game_process(binary: &Path, handoff: Option<Option<String>>) -> Res
     #[cfg(target_os = "linux")]
     scrub_appimage_env(&mut command);
 
+    command.env_remove("LAKESIDE_ACHIEVEMENTS_FILE");
+    if let Some(path) = achievement_path {
+        command.env("LAKESIDE_ACHIEVEMENTS_FILE", path);
+    }
     if let Some(code) = handoff {
         command.env_remove("LAKESIDE_HANDOFF_CODE");
         for (key, value) in installer::launch_env(env!("CARGO_PKG_VERSION"), code.as_deref()) {
@@ -574,7 +594,7 @@ pub fn spawn_game_process(binary: &Path, handoff: Option<Option<String>>) -> Res
                 child.id(),
                 binary.file_name().and_then(|name| name.to_str()).unwrap_or("?")
             ));
-            child.id()
+            child
         })
         .map_err(|error| format!("Could not start the game: {error}"))
 }
@@ -681,7 +701,7 @@ async fn launch_desktop_app(
     }
     let found = find_desktop_app(&product_id)
         .ok_or_else(|| "That app is not installed on this computer.".to_string())?;
-    spawn_game(&app, &found.executable, handoff_client_id.as_deref()).await?;
+    spawn_game(&app, &product_id, &found.executable, handoff_client_id.as_deref()).await?;
     shell::record_played(&app, &product_id);
     Ok(())
 }
@@ -720,14 +740,15 @@ fn open_web_game(
         safe_title
     };
 
-    WebviewWindowBuilder::new(&app, label, WebviewUrl::External(parsed))
+    let window = WebviewWindowBuilder::new(&app, label, WebviewUrl::External(parsed))
         .title(window_title)
         .inner_size(1280.0, 800.0)
         .min_inner_size(900.0, 600.0)
         .center()
         .build()
-        .map(|_| ())
-        .map_err(|error| format!("Could not open the game window: {error}"))
+        .map_err(|error| format!("Could not open the game window: {error}"))?;
+    activity::watch_window(&app, &product_id, &window);
+    Ok(())
 }
 
 /// Open a system browser for sign-in or checkout. Only Lakeside hosts and
@@ -1860,6 +1881,7 @@ pub fn run() {
 
     if headless_update {
         builder = builder.setup(|app| {
+            activity::setup(app.handle());
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 use tauri_plugin_updater::UpdaterExt;
@@ -1895,8 +1917,18 @@ pub fn run() {
         });
     }
 
+    if !headless_update {
+        builder = builder.setup(|app| {
+            activity::setup(app.handle());
+            Ok(())
+        });
+    }
+
     builder
         .invoke_handler(tauri::generate_handler![
+            activity::playtime,
+            activity::local_achievements,
+            activity::ahd_achievements,
             launch_product,
             detect_desktop_app,
             launch_desktop_app,
@@ -1923,8 +1955,13 @@ pub fn run() {
             shell::fetch_home_feed,
             shell::free_access_status
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running the Lakeside launcher");
+        .build(tauri::generate_context!())
+        .expect("error while building the Lakeside launcher")
+        .run(|app, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                activity::flush(app);
+            }
+        });
 }
 
 #[cfg(test)]

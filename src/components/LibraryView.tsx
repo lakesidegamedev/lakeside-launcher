@@ -1,6 +1,8 @@
+import { playtimeText } from "./GameActivity";
 import { useState } from "react";
 import type { GameRow } from "../lib/rows";
-import { Thumb } from "./Thumb";
+import { KEY_ART } from "./home/keyart";
+import { gameKeyForRow } from "../lib/home";
 
 type Filter = "all" | "installed" | "updates" | "browser";
 
@@ -50,7 +52,7 @@ export function LibraryView({ rows, signedIn, onSelect, onAction, onSignIn }: Pr
 
   return (
     <section>
-      <div className="head">
+      <div className="head library-heading">
         <h1>Library</h1>
         <span className="muted">
           {rows.length} games, {counts.installed} installed
@@ -61,6 +63,7 @@ export function LibraryView({ rows, signedIn, onSelect, onAction, onSignIn }: Pr
               key={chip.id}
               type="button"
               className={filter === chip.id ? "chip on" : "chip"}
+              aria-pressed={filter === chip.id}
               onClick={() => setFilter(chip.id)}
             >
               {chip.label} {counts[chip.id]}
@@ -83,61 +86,42 @@ export function LibraryView({ rows, signedIn, onSelect, onAction, onSignIn }: Pr
           {rows.length === 0 ? "Nothing in your library yet. Open the Store to find a game." : "No games match."}
         </div>
       ) : (
-        <table className="lib">
-          <thead>
-            <tr>
-              <th style={{ width: "36%" }}>Game</th>
-              <th>State</th>
-              <th>Size</th>
-              <th>Last played</th>
-              <th className="r">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {visible.map((row) => (
-              <tr key={row.product.id}>
-                <td>
-                  <button type="button" className="rowlink" onClick={() => onSelect(row)}>
-                    <Thumb product={row.product} />
-                    <span>
-                      <b>
-                        <span className="dot" style={{ background: row.product.accent }} /> {row.title}
-                      </b>
-                      <small>{row.blurb}</small>
+        <ul className="library-grid">
+          {visible.map((row) => {
+            const key = gameKeyForRow(row.product.id);
+            const art = key ? KEY_ART[key] : row.product.art;
+            return (
+              <li key={row.product.id} className="library-game">
+                <button type="button" className="library-cover" onClick={() => onSelect(row)}>
+                  {art ? <img src={art} alt="" /> : null}
+                  <span>{row.title}</span>
+                </button>
+                <div className="library-game-body">
+                  <div className="library-game-info">
+                    <span className={`state ${row.state.tone}`}>
+                      {row.playtime?.running ? "Now playing" : row.state.label}
                     </span>
+                    <span className="muted">{row.freeText ?? row.state.detail ?? row.blurb}</span>
+                  </div>
+                  {row.playtime ? (
+                    <dl className="library-playtime">
+                      <div><dt>Playtime</dt><dd>{playtimeText(row.playtime)}</dd></div>
+                      <div><dt>Last played</dt><dd>{row.lastPlayed}</dd></div>
+                    </dl>
+                  ) : null}
+                </div>
+                <div className="library-game-actions">
+                  <button type="button" className="textlink" aria-label={`Details for ${row.title}`} onClick={() => onSelect(row)}>
+                    Details
                   </button>
-                </td>
-                <td>
-                  <span className={`state ${row.state.tone}`}>{row.state.label}</span>
-                  {row.freeText ? (
-                    <>
-                      <br />
-                      <small className="owned">{row.freeText}</small>
-                    </>
-                  ) : null}
-                  {row.state.detail ? (
-                    <>
-                      <br />
-                      <small className="muted">{row.state.detail}</small>
-                    </>
-                  ) : null}
-                </td>
-                <td>{row.sizeText}</td>
-                <td>{row.lastPlayed}</td>
-                <td className="r">
-                  <button
-                    type="button"
-                    className="btn p"
-                    disabled={row.actionDisabled}
-                    onClick={() => onAction(row)}
-                  >
+                  <button type="button" className="btn p" disabled={row.actionDisabled} onClick={() => onAction(row)}>
                     {row.action.label}
                   </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       )}
 
       {!signedIn ? (

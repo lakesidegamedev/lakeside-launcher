@@ -1,3 +1,4 @@
+import type { Playtime } from "./tauri";
 import type { Product } from "../catalog";
 import type { GameAction, GameState } from "./state";
 
@@ -14,6 +15,7 @@ export interface GameRow {
   actionDisabled: boolean;
   sizeText: string;
   lastPlayed: string;
+  playtime?: Playtime;
   installedVersion: string | null;
   latestVersion: string | null;
   updateAvailable: boolean;
