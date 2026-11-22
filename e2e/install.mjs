@@ -270,6 +270,10 @@ async function main() {
 async function playThrough(key, g) {
   await stage(`${key}-game-page`, 60000, () => openGamePage(g));
 
+  const preview = process.env.BUILD_CHANNEL === "preview" && key === "urban-sprawl";
+  const installButton = preview
+    ? launcherPage.getByRole("button", { name: /^Install Preview / })
+    : primary();
   const baselineDirs = topLevelDirs();
   await stage(`${key}-offers-install`, 75000, async () => {
     if (fs.existsSync(g.installDir) && fs.readdirSync(g.installDir).some((f) => g.exeName.test(f))) {
@@ -282,7 +286,8 @@ async function playThrough(key, g) {
       label = await primaryText();
     }
     console.log(`${g.title} primary action before install: "${label}"`);
-    if (label !== "Install") throw new Error(`expected Install, the page offers "${label}"`);
+    if (preview) await installButton.waitFor({ timeout: 50000 });
+    else if (label !== "Install") throw new Error(`expected Install, the page offers "${label}"`);
     const playInBrowser = await launcherPage.getByRole("button", { name: "Play in browser" }).count();
     console.log(`${g.title} offers Play in browser: ${playInBrowser > 0}`);
     if (key === "grand-century" && playInBrowser === 0) throw new Error("Grand Century must always offer Play in browser");
@@ -290,13 +295,14 @@ async function playThrough(key, g) {
 
   const offset = logOffset();
   await stage(`${key}-install`, 600000, async () => {
-    await primary().click();
+    await installButton.click();
     await sleep(4000);
     await shoot(launcherPage, `${key}-installing`);
     const end = Date.now() + 570000;
     for (;;) {
       const state = await stateText();
       if (/^Installed /.test(state)) {
+        if (preview && !/-preview\.\d+/.test(state)) throw new Error(`expected a Preview install, got "${state}"`);
         console.log(`${g.title} state: ${state}`);
         break;
       }
@@ -395,7 +401,7 @@ async function playThrough(key, g) {
     await launcherPage.getByRole("button", { name: "Confirm uninstall" }).first().click();
     const end = Date.now() + 270000;
     for (;;) {
-      if ((await primaryText()) === "Install") break;
+      if (preview ? await installButton.count() === 1 : (await primaryText()) === "Install") break;
       if (Date.now() > end) throw new Error(`still showing "${await primaryText()}" after uninstall`);
       await sleep(2000);
     }

@@ -29,6 +29,7 @@ const OPTIONAL_DESKTOP = [
     id: "margin-of-victory",
     name: "Margin of Victory",
     repo: "lakesidegamedev/MOVGame",
+    studioPreview: true,
     optional: true,
     artifacts: [
       { key: "windows-x64", match: /_x64-setup\.exe$/i, kind: "nsis" },
@@ -58,6 +59,7 @@ export const PRODUCTS = [
     id: "ahd",
     name: "A House Divided",
     repo: "lakesidegamedev/AHDClient",
+    studioPreview: true,
     artifacts: [
       { key: "windows-x64", match: /_x64-setup\.exe$/i, kind: "nsis" },
       { key: "macos-arm64", match: /_aarch64\.dmg$/i, kind: "dmg" },
@@ -105,13 +107,13 @@ export function buildManifest({ releases, products = PRODUCTS, channel = "stable
 
   for (const product of products) {
     const release = releases[product.repo];
-    if (!release) continue;
+    if (!release || (channel === "preview" && (!product.studioPreview || !isPreview(release)))) continue;
 
     const assets = Array.isArray(release.assets) ? release.assets : [];
     const artifacts = {};
     for (const artifact of product.artifacts) {
       const asset = assets.find((candidate) => artifact.match.test(candidate.name ?? ""));
-      if (!asset) continue;
+      if (!asset || (channel === "preview" && !/^[a-f0-9]{64}$/.test(normalizeDigest(asset.digest) ?? ""))) continue;
       artifacts[artifact.key] = {
         name: asset.name,
         kind: artifact.kind,
@@ -151,14 +153,18 @@ export function signBytes(payload, privateKeyPem) {
   return sign(null, Buffer.from(payload), createPrivateKey(privateKeyPem)).toString("base64");
 }
 
-async function fetchLatest(repo, token) {
+function isPreview(release) {
+  return release.prerelease === true && !release.draft && /^v?\d+\.\d+\.\d+-preview\.\d+$/i.test(release.tag_name ?? "");
+}
+
+async function fetchReleaseData(repo, path, token) {
   const headers = {
     accept: "application/vnd.github+json",
     "user-agent": "lakeside-launcher-manifest",
   };
   if (token) headers.authorization = `Bearer ${token}`;
 
-  const response = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, { headers });
+  const response = await fetch(`https://api.github.com/repos/${repo}/releases${path}`, { headers });
   if (response.status === 404) return null;
   if (!response.ok) {
     throw new Error(`GitHub ${repo}: ${response.status} ${response.statusText}`);
@@ -166,13 +172,22 @@ async function fetchLatest(repo, token) {
   return response.json();
 }
 
-export async function collectReleases({ products = PRODUCTS, token = process.env.GITHUB_TOKEN } = {}) {
+export async function collectReleases({ products = PRODUCTS, token = process.env.GITHUB_TOKEN, channel = "stable" } = {}) {
   const entries = await Promise.all(
     products.map(async (product) => {
       try {
-        return [product.repo, await fetchLatest(product.repo, token)];
+        if (channel === "preview") {
+          if (!product.studioPreview) return [product.repo, null];
+          const releases = await fetchReleaseData(product.repo, "?per_page=30", token);
+          return [product.repo, releases?.find((release) =>
+            isPreview(release) && product.artifacts.some((artifact) => release.assets?.some((asset) =>
+              artifact.match.test(asset.name ?? "") && /^[a-f0-9]{64}$/.test(normalizeDigest(asset.digest) ?? "")
+            ))
+          ) ?? null];
+        }
+        return [product.repo, await fetchReleaseData(product.repo, "/latest", token)];
       } catch (error) {
-        if (product.optional) return [product.repo, null];
+        if (product.optional || channel === "preview") return [product.repo, null];
         throw error;
       }
     }),
@@ -192,8 +207,12 @@ function parseArgs(argv) {
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
-  const releases = await collectReleases();
+  const [releases, previews] = await Promise.all([
+    collectReleases({ channel: options.channel }),
+    options.channel === "stable" ? collectReleases({ channel: "preview" }) : null,
+  ]);
   const manifest = buildManifest({ releases, channel: options.channel });
+  if (previews) manifest.previews = buildManifest({ releases: previews, channel: "preview" }).products;
   const body = `${JSON.stringify(manifest, null, 2)}\n`;
 
   await mkdir(dirname(options.out), { recursive: true });

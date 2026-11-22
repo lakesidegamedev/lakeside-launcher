@@ -1,6 +1,8 @@
 // The download queue as plain data, so the Downloads tab, the bottom bar and
 // the tests all read the same thing.
 
+import type { BuildChannel } from "./tauri";
+
 export type DownloadStatus = "queued" | "running" | "done" | "failed";
 
 export interface DownloadItem {
@@ -9,6 +11,7 @@ export interface DownloadItem {
   title: string;
   kind: "install" | "update" | "reinstall";
   version: string;
+  channel?: BuildChannel;
   status: DownloadStatus;
   downloaded: number;
   total: number | null;
@@ -24,12 +27,14 @@ export function newDownload(
   title: string,
   kind: "install" | "update" | "reinstall",
   version: string,
+  channel: BuildChannel = "full",
 ): DownloadItem {
   return {
     id,
     title,
     kind,
     version,
+    channel,
     status: "queued",
     downloaded: 0,
     total: null,

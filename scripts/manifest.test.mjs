@@ -192,3 +192,25 @@ describe("manifest", () => {
     );
   });
 });
+
+it("lists verified studio previews without promoting them to Full", () => {
+  const sha256 = "a".repeat(64);
+  const preview = {
+    ...ahdRelease,
+    tag_name: "v2.7.0-preview.3",
+    prerelease: true,
+    assets: [{ ...ahdRelease.assets[0], digest: `sha256:${sha256}` }, ahdRelease.assets[3]],
+  };
+  const releases = {
+    "lakesidegamedev/AHDClient": preview,
+    "Egg3901/grand-century": { ...preview, assets: [{ ...preview.assets[0], name: "GrandCentury_1.0.0_x64-setup.exe" }] },
+  };
+  const manifest = buildManifest({ releases, channel: "preview" });
+  assert.deepEqual(Object.keys(manifest.products), ["ahd"]);
+  assert.deepEqual(Object.keys(manifest.products.ahd.artifacts), ["windows-x64"]);
+  assert.equal(manifest.products.ahd.version, "2.7.0-preview.3");
+  assert.equal(manifest.products.ahd.artifacts["windows-x64"].sha256, sha256);
+  assert.deepEqual(buildManifest({
+    releases: { "lakesidegamedev/AHDClient": { ...preview, draft: true } }, channel: "preview",
+  }).products, {});
+});

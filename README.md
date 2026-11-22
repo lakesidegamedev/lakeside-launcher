@@ -310,3 +310,24 @@ per-platform executables).
    feed (or attach them to the GitHub release with `gh release create`).
 4. Back up `latest.json` first (`latest.prev.json`) so the feed can be rolled
    back by copying it over.
+
+## Full and Preview builds
+
+A game page offers **Desktop builds** when a Preview installer is published for
+this system. New installs default to Full. Picking Preview installs that
+channel, and updates follow the installed build. To go back, choose Full in the
+same panel. Both channels use the game's ordinary install location and leave
+its save folder in place. A macOS disk image is downloaded for manual setup.
+
+For authenticated studio games, the accounts service uses
+`<product>/latest.json` for Full and `<product>/preview/latest.json` for Preview.
+Installers should live in immutable versioned folders. Publish the channel
+pointer after uploading and verifying its files. Game grants apply to both
+channels.
+
+For public studio releases, the signed launcher manifest adds preview assets
+from the studio repositories opted in through `studioPreview` in
+`scripts/manifest.mjs`. Publish a GitHub prerelease with a tag such as
+`v2.0.0-preview.3` and attach the platform installers. The manifest only lists
+preview assets that have a SHA-256 digest. Partner release feeds continue to
+use their existing Full builds.

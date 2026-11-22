@@ -76,6 +76,8 @@ export async function launchDesktopApp(
   });
 }
 
+export type BuildChannel = "full" | "preview";
+
 export interface ReleaseArtifact {
   name: string;
   kind: string;
@@ -98,6 +100,7 @@ export interface ReleaseManifest {
   channel: string;
   generatedAt: string;
   products: Record<string, ReleaseProduct>;
+  previews?: Record<string, ReleaseProduct>;
 }
 
 export async function getReleaseManifest(): Promise<ReleaseManifest> {
@@ -108,8 +111,8 @@ export async function getReleaseManifest(): Promise<ReleaseManifest> {
  * Release details for a paid product, read by the launcher backend with the
  * stored session. Null when nothing is published or the player is signed out.
  */
-export async function getAccountRelease(commercialId: string): Promise<ReleaseProduct | null> {
-  return invoke<ReleaseProduct | null>("account_release", { commercialId });
+export async function getAccountRelease(commercialId: string, channel: BuildChannel = "full"): Promise<ReleaseProduct | null> {
+  return invoke<ReleaseProduct | null>("account_release", { commercialId, channel });
 }
 
 export interface InstallProgress {
@@ -145,6 +148,7 @@ export interface InstallRequest {
   commercialId?: string;
   /** Save-only package instead of this system's installer: "deb". */
   package?: string;
+  channel?: BuildChannel;
 }
 
 export async function isInstalled(executable: string): Promise<boolean> {
@@ -160,6 +164,7 @@ export async function installRelease(request: InstallRequest): Promise<InstallRe
     ...request,
     commercialId: request.commercialId ?? null,
     package: request.package ?? null,
+    channel: request.channel ?? null,
   });
 }
 
