@@ -162,7 +162,7 @@ jobs:
         run: |
           echo "::add-mask::$LAKESIDE_TEST2_USERNAME"
           echo "::add-mask::$LAKESIDE_TEST2_PASSWORD"
-          node e2e/token.mjs "$RUNNER_TEMP/bearer"
+          xvfb-run -a node e2e/token.mjs "$RUNNER_TEMP/bearer"
 
       - name: Corporate Warfare (AppImage, paid path with handoff)
         if: ${{ inputs.games == '' || contains(inputs.games, 'corporate-warfare') }}
