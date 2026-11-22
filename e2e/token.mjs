@@ -1,6 +1,6 @@
 // Signs in as the second test account the way the launcher does (loopback
-// callback, one-time code, POST /account/launcher/session) in a headless
-// browser, and writes the bearer to the file named by argv[2]. For the Linux
+// callback, one-time code, POST /account/launcher/session) in a browser
+// under a virtual display, and writes the bearer to the file named by argv[2]. For the Linux
 // install check, where the launcher window itself cannot be driven.
 import { chromium } from "playwright-core";
 import http from "node:http";
@@ -28,16 +28,18 @@ const server = http.createServer((req, res) => {
 });
 await new Promise((resolve) => server.listen(port, "127.0.0.1", resolve));
 
-const browser = await chromium.launch({ channel: "chrome", headless: true });
+const browser = await chromium.launch({ channel: "chrome", headless: false });
 const page = await browser.newPage();
 const deadline = Date.now() + 120000;
 try {
   await page.goto(`https://lakesidegames.net/account/launcher/start?provider=ahd&port=${port}&state=${state}`);
   const email = page.locator("input#email, input[name=email], input[name=username]").first();
   await email.waitFor({ timeout: 60000 });
+  await page.waitForLoadState("networkidle", { timeout: 12000 }).catch(() => {});
   await email.fill(user);
   await page.locator("input[type=password]").first().fill(pass);
-  await page.locator("button[type=submit], input[type=submit]").first().click();
+  await page.locator("form").filter({ has: page.locator("input[type=password]") })
+    .locator("button[type=submit], input[type=submit]").first().click();
   while (!captured && Date.now() < deadline) {
     for (const name of ["Authorize", "Allow", "Approve"]) {
       const button = page.getByRole("button", { name, exact: true }).first();
