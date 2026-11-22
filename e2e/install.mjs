@@ -200,15 +200,17 @@ function topLevelDirs() {
 
 async function openGamePage(g) {
   await launcherPage.getByRole("button", { name: "Library" }).first().click();
-  const row = launcherPage.locator("table.lib tr").filter({ hasText: g.title }).first();
-  await row.waitFor({ timeout: 20000 });
-  await row.locator("button.rowlink").first().click();
+  await launcherPage.getByRole("button", { name: `Details for ${g.title}`, exact: true }).click({ timeout: 20000 });
   await launcherPage.locator("h1", { hasText: g.title }).first().waitFor({ timeout: 15000 });
 }
 
 const primary = () => launcherPage.locator(".gamehead .actions .btn.p").first();
 const primaryText = async () => ((await primary().textContent({ timeout: 5000 }).catch(() => "")) ?? "").trim();
-const stateText = async () => ((await launcherPage.locator(".gamehead .state.inline").first().textContent({ timeout: 5000 }).catch(() => "")) ?? "").trim();
+const stateText = async () => {
+  const panel = launcherPage.locator(".panel").filter({ has: launcherPage.getByRole("heading", { name: "Installed", exact: true }) });
+  const version = (await panel.locator(".kv > span").nth(1).textContent({ timeout: 5000 }).catch(() => ""))?.trim();
+  return version ? `Installed ${version}` : "";
+};
 
 async function main() {
   await stage("connect-launcher", 60000, async () => {
@@ -394,6 +396,21 @@ async function playThrough(key, g) {
     }
     console.log(`markers planted: ${sentinels.map((f) => path.relative(process.env.USERPROFILE, f)).join(", ")}`);
   });
+
+  if (preview) {
+    await stage(`${key}-switch-to-full`, 180000, async () => {
+      const full = launcherPage.getByRole("button", { name: /^Switch Full / });
+      const label = await full.getAttribute("aria-label");
+      const expected = label?.slice("Switch Full ".length);
+      if (!expected) throw new Error("Full version is missing");
+      await full.click();
+      const end = Date.now() + 160000;
+      while ((await stateText()) !== `Installed ${expected}` && Date.now() < end) await sleep(2000);
+      if ((await stateText()) !== `Installed ${expected}`) throw new Error("Full build did not replace Preview");
+      if (sentinels.some((file) => !fs.existsSync(file))) throw new Error("switching builds removed saves");
+      console.log(`Switched from ${version} to Full ${expected}; saves remained in place.`);
+    });
+  }
 
   await stage(`${key}-uninstall`, 300000, async () => {
     await openGamePage(g);
