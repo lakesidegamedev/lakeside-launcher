@@ -42,6 +42,7 @@ import {
   type PatchNote,
   type ReleaseArtifact,
   type ReleaseProduct,
+  type BuildChannel,
 } from "./lib/tauri";
 import { checkForUpdate, installUpdate, type UpdateInfo } from "./lib/updater";
 import { isNewerVersion } from "./lib/version";
@@ -120,6 +121,8 @@ export function App(): JSX.Element {
   const [releases, setReleases] = useState<Record<string, ReleaseProduct>>(
     demo ? DEMO_RELEASES : {},
   );
+  const [buildRefresh, setBuildRefresh] = useState(0);
+  const [previewReleases, setPreviewReleases] = useState<Record<string, ReleaseProduct>>({});
   const [installed, setInstalled] = useState<Record<string, InstalledProduct>>(
     demo ? DEMO_INSTALLED : {},
   );
@@ -260,6 +263,16 @@ export function App(): JSX.Element {
         for (const product of CATALOG) {
           if (product.authenticatedDownload) delete publicProducts[product.id];
         }
+        setPreviewReleases((previous) => {
+          const publicPreviews = { ...manifest.previews };
+          for (const product of CATALOG) {
+            if (!product.authenticatedDownload) continue;
+            delete publicPreviews[product.id];
+            const existing = previous[product.id];
+            if (existing) publicPreviews[product.id] = existing;
+          }
+          return publicPreviews;
+        });
         setReleases((previous) => {
           const paid: Record<string, ReleaseProduct> = {};
           for (const product of CATALOG) {
@@ -275,7 +288,7 @@ export function App(): JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [buildRefresh]);
 
   useEffect(() => {
     if (!isDesktop()) return;
@@ -299,6 +312,11 @@ export function App(): JSX.Element {
     const paid = catalogProducts.filter((product) => product.authenticatedDownload && product.entitlementIds[0]);
     if (!signedInUser) {
       setReleaseChecked({});
+      setPreviewReleases((previous) => {
+        const next = { ...previous };
+        for (const product of paid) delete next[product.id];
+        return next;
+      });
       setReleases((previous) => {
         const next = { ...previous };
         for (const product of paid) delete next[product.id];
@@ -307,6 +325,17 @@ export function App(): JSX.Element {
       return;
     }
     for (const product of paid) {
+      void getAccountRelease(product.entitlementIds[0] as string, "preview")
+        .catch(() => null)
+        .then((release) => {
+          if (cancelled) return;
+          setPreviewReleases((previous) => {
+            const next = { ...previous };
+            if (release) next[product.id] = release;
+            else delete next[product.id];
+            return next;
+          });
+        });
       void getAccountRelease(product.entitlementIds[0] as string)
         .catch(() => null)
         .then((release) => {
@@ -323,7 +352,7 @@ export function App(): JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, [signedInUser, catalogProducts]);
+  }, [signedInUser, catalogProducts, buildRefresh]);
 
   useEffect(() => {
     if (!isDesktop() || platform !== "windows") return;
@@ -404,7 +433,8 @@ export function App(): JSX.Element {
   const selectedDesktopId = gameId
     ? (PRODUCTS_BY_ID.get(gameId)?.companion ?? gameId)
     : null;
-  const notesUrl = selectedDesktopId ? (releases[selectedDesktopId]?.notesUrl ?? null) : null;
+  const selectedDesktop = selectedDesktopId ? PRODUCTS_BY_ID.get(selectedDesktopId) : undefined;
+  const notesUrl = selectedDesktop ? (releaseFor(selectedDesktop)?.notesUrl ?? null) : null;
   useEffect(() => {
     if (!selectedDesktopId || !notesUrl || !isDesktop() || notes[selectedDesktopId]) return;
     let cancelled = false;
@@ -515,8 +545,16 @@ export function App(): JSX.Element {
     }
   }
 
-  function artifactFor(product: Product): ReleaseArtifact | null {
-    const release = releases[product.id];
+  function installedChannel(product: Product): BuildChannel {
+    return /-preview\.\d+$/i.test(installed[product.id]?.version ?? "") ? "preview" : "full";
+  }
+
+  function releaseFor(product: Product, channel = installedChannel(product)): ReleaseProduct | undefined {
+    return (channel === "preview" ? previewReleases : releases)[product.id];
+  }
+
+  function artifactFor(product: Product, channel?: BuildChannel): ReleaseArtifact | null {
+    const release = releaseFor(product, channel);
     if (!release) return null;
     const key =
       platform === "windows"
@@ -564,7 +602,7 @@ export function App(): JSX.Element {
   }
 
   function latestVersion(product: Product): string | null {
-    return releases[product.id]?.version ?? null;
+    return releaseFor(product)?.version ?? null;
   }
 
   function hasUpdate(product: Product): boolean {
@@ -573,23 +611,24 @@ export function App(): JSX.Element {
     return !!latest && isNewerVersion(latest, current);
   }
 
-  function enqueueInstall(product: Product): void {
-    const release = releases[product.id];
-    if (!release || !artifactFor(product)?.sha256) {
+  function enqueueInstall(product: Product, channel = installedChannel(product)): void {
+    const release = releaseFor(product, channel);
+    if (!release || !artifactFor(product, channel)?.sha256) {
       setNotice("No verified installer is published for this platform yet.");
       return;
     }
-    const kind = installed[product.id] ? (hasUpdate(product) ? "update" : "reinstall") : "install";
+    const current = installed[product.id]?.version;
+    const kind = current ? (current === release.version ? "reinstall" : "update") : "install";
     setDownloads((previous) => {
       if (activeDownloads(previous).some((item) => item.id === product.id)) return previous;
       const rest = previous.filter((item) => item.id !== product.id);
-      return [...rest, newDownload(product.id, product.title, kind, release.version)];
+      return [...rest, newDownload(product.id, product.title, kind, release.version, channel)];
     });
   }
 
-  async function handleInstall(product: Product): Promise<void> {
-    const artifact = artifactFor(product);
-    if (macBrowserDownload(product) && product.browserDownloadUrl) {
+  async function handleInstall(product: Product, channel = installedChannel(product)): Promise<void> {
+    const artifact = artifactFor(product, channel);
+    if (channel === "full" && macBrowserDownload(product) && product.browserDownloadUrl) {
       try {
         await openExternal(product.browserDownloadUrl);
         setNotice(`Your ${product.title} download is on your account page.`);
@@ -608,7 +647,7 @@ export function App(): JSX.Element {
       }
       return;
     }
-    enqueueInstall(product);
+    enqueueInstall(product, channel);
   }
 
   // Run queued installs one at a time.
@@ -616,13 +655,15 @@ export function App(): JSX.Element {
   useEffect(() => {
     if (!startId) return;
     const product = PRODUCTS_BY_ID.get(startId);
-    const release = releases[startId];
-    const artifact = product ? artifactFor(product) : null;
-    if (!product || !release || !artifact?.sha256) {
+    const queued = downloads.find((item) => item.id === startId);
+    const channel = queued?.channel ?? "full";
+    const release = product ? releaseFor(product, channel) : null;
+    const artifact = product ? artifactFor(product, channel) : null;
+    if (!product || !release || release.version !== queued?.version || !artifact?.sha256) {
       setDownloads((previous) =>
         previous.map((item) =>
           item.id === startId
-            ? { ...item, status: "failed", error: "No verified installer is published.", finishedAt: Date.now() }
+            ? { ...item, status: "failed", error: "This build is no longer available. Retry to get the latest build.", finishedAt: Date.now() }
             : item,
         ),
       );
@@ -645,6 +686,7 @@ export function App(): JSX.Element {
     void installRelease({
       productId: product.id,
       version: release.version,
+      channel,
       url: artifact.url,
       sha256: artifact.sha256,
       fileName: artifact.name,
@@ -696,7 +738,7 @@ export function App(): JSX.Element {
 
   /** Save the .deb to Downloads and open the folder. No install is run. */
   async function handleExtraDownload(product: Product): Promise<void> {
-    const release = releases[product.id];
+    const release = releaseFor(product);
     const artifact = release?.artifacts["linux-deb"];
     if (!release || !artifact?.sha256) {
       setNotice("No verified package is published for this system yet.");
@@ -712,6 +754,7 @@ export function App(): JSX.Element {
         kind: artifact.kind,
         commercialId: product.authenticatedDownload ? (product.entitlementIds[0] ?? undefined) : undefined,
         package: "deb",
+        channel: installedChannel(product),
       });
       setNotice(`Saved the ${product.title} package to Downloads.`);
     } catch (error) {
@@ -835,7 +878,7 @@ export function App(): JSX.Element {
     if (desktop && comingTonight(desktop) && !installing) {
       action = {
         kind: "none",
-        label: releaseChecked[desktop.id] ? "Coming tonight" : "Checking...",
+        label: releaseChecked[desktop.id] ? "No Full build available" : "Checking...",
       };
       actionDisabled = true;
     } else if (desktop && macBrowserDownload(desktop) && action.kind === "install") {
@@ -843,7 +886,7 @@ export function App(): JSX.Element {
     } else if (desktop && platform === "macos" && action.kind === "install" && artifactFor(desktop)?.kind === "dmg") {
       action = { kind: "install", label: "Download" };
     }
-    const debArtifact = desktop && platform === "linux" ? (releases[desktop.id]?.artifacts["linux-deb"] ?? null) : null;
+    const debArtifact = desktop && platform === "linux" ? (releaseFor(desktop)?.artifacts["linux-deb"] ?? null) : null;
     const extraDownload = debArtifact?.sha256 && debArtifact.kind === "deb" ? { label: "Download .deb" } : null;
     const artifact = desktop ? artifactFor(desktop) : null;
     const detail = desktop ? details[desktop.id] : undefined;
@@ -874,6 +917,28 @@ export function App(): JSX.Element {
       freeText: desktop && freeIds.has(desktop.id) ? freeText : null,
       extraDownload,
     };
+  }
+
+  function buildOptions(row: GameRow) {
+    const product = row.desktop;
+    if (!product || !row.owned || !isDesktop()) return [];
+    const preview = previewReleases[product.id];
+    if (!preview && installedChannel(product) !== "preview") return [];
+    const channels: readonly BuildChannel[] = ["full", "preview"];
+    return channels.flatMap((channel) => {
+      const release = releaseFor(product, channel);
+      const artifact = artifactFor(product, channel);
+      if (!release || !artifact?.sha256 || !installerSupported(artifact.kind, platform)) return [];
+      const current = row.installedVersion === release.version;
+      const label = channel === "full" ? "Full" : "Preview";
+      return [{
+        channel,
+        label,
+        version: release.version,
+        current,
+        action: artifact.kind === "dmg" || product.registryApp ? "Download" : current ? "Reinstall" : row.installedVersion ? "Switch" : "Install",
+      }];
+    });
   }
 
   function runAction(row: GameRow): void {
@@ -1024,6 +1089,15 @@ export function App(): JSX.Element {
                 ? void runBackend("Open folder", () => openInstallFolder(selectedRow.desktop!.id))
                 : undefined
             }
+            buildOptions={buildOptions(selectedRow)}
+            onRefreshBuilds={isDesktop() && selectedRow.desktop && selectedRow.owned ? () => {
+              setBuildRefresh((refresh) => refresh + 1);
+              setNotice("Checking for new builds…");
+            } : undefined}
+            changingBuild={activeDownloads(downloads).some((item) => item.id === selectedRow.desktop?.id)}
+            onBuild={(channel) => {
+              if (selectedRow.desktop) void handleInstall(selectedRow.desktop, channel);
+            }}
             canReinstall={
               !!selectedRow.desktop && canInstall(selectedRow.desktop) && !macBrowserDownload(selectedRow.desktop)
             }
@@ -1086,7 +1160,7 @@ export function App(): JSX.Element {
             }
             onRetry={(id) => {
               const product = PRODUCTS_BY_ID.get(id);
-              if (product) enqueueInstall(product);
+              if (product) enqueueInstall(product, downloads.find((item) => item.id === id)?.channel);
             }}
             onOpenFolder={() => {
               void runBackend("Open folder", () => openInstallFolder(null));

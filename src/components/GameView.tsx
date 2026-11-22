@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { formatPrice, type Entitlements, type Platform } from "../catalog";
 import type { GameRow } from "../lib/rows";
-import type { Capability, PatchNote } from "../lib/tauri";
+import type { BuildChannel, Capability, PatchNote } from "../lib/tauri";
 import {
   addOnRows,
   addonsFor,
@@ -31,6 +31,10 @@ interface Props {
   onBuy: () => void;
   onOpenUrl: (url: string) => void;
   onOpenFolder: () => void;
+  buildOptions: readonly { channel: BuildChannel; label: string; version: string; current: boolean; action: string }[];
+  onRefreshBuilds?: () => void;
+  changingBuild: boolean;
+  onBuild: (channel: BuildChannel) => void;
   /** The published installer can be downloaded again for this game on this system. */
   canReinstall: boolean;
   onReinstall: () => void;
@@ -60,6 +64,10 @@ export function GameView({
   onBuy,
   onOpenUrl,
   onOpenFolder,
+  buildOptions,
+  onRefreshBuilds,
+  changingBuild,
+  onBuild,
   canReinstall,
   onReinstall,
   onUninstall,
@@ -244,6 +252,32 @@ export function GameView({
         </div>
 
         <aside>
+          {buildOptions.length > 0 ? (
+            <div className="panel build-options">
+              <div className="build-option">
+                <h3>Desktop builds</h3>
+                <button type="button" className="textlink" onClick={onRefreshBuilds} disabled={changingBuild}>Check for builds</button>
+              </div>
+              {buildOptions.map((build) => (
+                <div className="build-option" key={build.channel}>
+                  <div>
+                    <b>{build.label}</b> <span className="muted">{build.version}</span>
+                    {build.current ? <div className="sub owned">Installed</div> : null}
+                  </div>
+                  <button
+                    type="button"
+                    className="btn sm"
+                    aria-label={`${build.action} ${build.label} ${build.version}`}
+                    disabled={changingBuild || busy}
+                    onClick={() => onBuild(build.channel)}
+                  >
+                    {build.action}
+                  </button>
+                </div>
+              ))}
+              <p className="sub muted">Installing a different build replaces the app. Your saves stay on this device.</p>
+            </div>
+          ) : null}
           {row.desktop && installed ? (
             <div className="panel">
               <h3>Installed</h3>
@@ -269,15 +303,17 @@ export function GameView({
                 >
                   Open folder
                 </button>
+                {buildOptions.length === 0 ? (
                 <button
                   type="button"
                   className="btn sm"
-                  disabled={!canReinstall}
+                  disabled={!canReinstall || changingBuild}
                   title={canReinstall ? undefined : "No verified installer is published for this system"}
                   onClick={onReinstall}
                 >
                   Reinstall
                 </button>
+                ) : null}
                 {confirming ? (
                   <button
                     type="button"
@@ -305,6 +341,9 @@ export function GameView({
           ) : null}
           <div className="panel" style={{ marginTop: installed ? 12 : 0 }}>
             <h3>Where you can play</h3>
+            {onRefreshBuilds && buildOptions.length === 0 ? (
+              <button type="button" className="textlink" onClick={onRefreshBuilds} disabled={changingBuild}>Check for builds</button>
+            ) : null}
             <div className="kv">
               {desktopPlatforms.length > 0 ? (
                 <>
@@ -320,7 +359,7 @@ export function GameView({
               ) : null}
             </div>
           </div>
-          {installed && canReinstall ? (
+          {installed && canReinstall && buildOptions.length === 0 ? (
             <div className="note" style={{ marginTop: 12 }}>
               Reinstall downloads the published installer again, checks it against its checksum and runs it
               over the current install. Saves are not touched.

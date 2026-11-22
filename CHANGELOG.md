@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.0
+
+- Game pages show Full and Preview builds when both are available for your system. Install either from a single page, including on a fresh setup, and switch back to Full whenever it is available.
+- Updates follow the installed build. Downloads shows which items are previews, and retries stay on the same channel.
+- Paid previews are checked against the same access and checksum requirements as Full builds. Public previews come from the signed studio manifest.
+
 ## 0.8.0
 
 - Home puts featured stories and recently played games first. Browse stories at your own pace, without countdowns or automatic rotation.

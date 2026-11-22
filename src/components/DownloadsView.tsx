@@ -24,7 +24,7 @@ function ItemCell({ item }: { item: DownloadItem }): JSX.Element {
     <div className="rowlink static">
       {product ? <Thumb product={product} /> : null}
       <span>
-        <b>{item.title}</b>
+        <b>{item.title}{item.channel === "preview" ? " · Preview" : ""}</b>
         <small>
           {item.kind === "update" ? "Update" : item.kind === "reinstall" ? "Reinstall" : "Install"} {item.version}
         </small>
@@ -136,7 +136,7 @@ export function DownloadsView({
               {finished.map((item) => (
                 <tr key={item.id}>
                   <td>
-                    {item.title} {item.version}
+                    {item.title}{item.channel === "preview" ? " · Preview" : ""} {item.version}
                   </td>
                   <td className={item.status === "failed" ? "warnText" : "muted"}>
                     {item.status === "done" ? "Installed, files checked" : (item.error ?? "Failed")}

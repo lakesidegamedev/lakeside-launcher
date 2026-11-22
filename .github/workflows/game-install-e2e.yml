@@ -18,6 +18,11 @@ on:
       games:
         description: Games to check on Windows (comma separated)
         default: 'corporate-warfare,grand-century'
+      build_channel:
+        description: Urban Sprawl build channel
+        type: choice
+        options: [full, preview]
+        default: full
 
 permissions:
   contents: read
@@ -95,6 +100,7 @@ jobs:
           LAKESIDE_TEST2_PASSWORD: ${{ secrets.LAKESIDE_TEST2_PASSWORD }}
           SHOT_DIR: ${{ github.workspace }}\e2e-shots
           GAMES: ${{ inputs.games || 'corporate-warfare,grand-century' }}
+          BUILD_CHANNEL: ${{ inputs.build_channel }}
         run: |
           Write-Host "::add-mask::$env:LAKESIDE_TEST2_USERNAME"
           Write-Host "::add-mask::$env:LAKESIDE_TEST2_PASSWORD"
@@ -169,11 +175,12 @@ jobs:
           export LAKESIDE_BEARER="$(cat "$RUNNER_TEMP/bearer")"
           xvfb-run -a cargo run --manifest-path src-tauri/Cargo.toml --example game_install_probe
 
-      - name: Urban Sprawl (AppImage, staff-only preview, needs the grant)
+      - name: Urban Sprawl (AppImage, paid path with handoff)
         if: ${{ inputs.games == '' || contains(inputs.games, 'urban-sprawl') }}
         timeout-minutes: 15
         env:
           PRODUCT: urban-sprawl
+          BUILD_CHANNEL: ${{ inputs.build_channel }}
           LAKESIDE_INSTALL_ROOT: ${{ runner.temp }}/lakeside-root-us
           LAKESIDE_E2E_LOG: ${{ runner.temp }}/linux-e2e.log
         run: |

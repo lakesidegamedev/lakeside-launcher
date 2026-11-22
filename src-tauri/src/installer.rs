@@ -263,18 +263,37 @@ fn valid_platform_key(value: &str) -> bool {
             .all(|character| character.is_ascii_alphanumeric() || character == '-' || character == '_')
 }
 
-/// `GET <base>/account/launcher/download/<productId>/<platform>`.
+#[derive(Debug, Clone, Copy, Default, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum BuildChannel {
+    #[default]
+    Full,
+    Preview,
+}
+
+impl BuildChannel {
+    fn path(self) -> &'static str {
+        match self {
+            Self::Full => "",
+            Self::Preview => "/preview",
+        }
+    }
+}
+
+/// `GET <base>/account/launcher/download/<productId>/[preview/]<platform>`.
 pub fn account_download_url(
     base: &str,
     commercial_id: &str,
     platform: &str,
+    channel: BuildChannel,
 ) -> Result<String, String> {
     if !valid_id(commercial_id) || !valid_platform_key(platform) {
         return Err("Invalid product or platform for the download.".to_string());
     }
     Ok(format!(
-        "{}/account/launcher/download/{commercial_id}/{platform}",
-        base.trim_end_matches('/')
+        "{}/account/launcher/download/{commercial_id}{}/{platform}",
+        base.trim_end_matches('/'),
+        channel.path()
     ))
 }
 
@@ -417,13 +436,14 @@ pub fn manifest_key_for_platform(platform: &str) -> Option<&'static str> {
 }
 
 /// `GET <base>/account/api/downloads/<productId>`.
-pub fn account_release_url(base: &str, commercial_id: &str) -> Result<String, String> {
+pub fn account_release_url(base: &str, commercial_id: &str, channel: BuildChannel) -> Result<String, String> {
     if !valid_id(commercial_id) {
         return Err("Invalid product for the release lookup.".to_string());
     }
     Ok(format!(
-        "{}/account/api/downloads/{commercial_id}",
-        base.trim_end_matches('/')
+        "{}/account/api/downloads/{commercial_id}{}",
+        base.trim_end_matches('/'),
+        channel.path()
     ))
 }
 
@@ -481,10 +501,10 @@ mod tests {
         assert_eq!(manifest_key_for_platform("windows-x86_64"), Some("windows-x64"));
         assert_eq!(manifest_key_for_platform("beos"), None);
         assert_eq!(
-            account_release_url("https://lakesidegames.net/", "corporate-warfare").as_deref(),
+            account_release_url("https://lakesidegames.net/", "corporate-warfare", BuildChannel::Full).as_deref(),
             Ok("https://lakesidegames.net/account/api/downloads/corporate-warfare")
         );
-        assert!(account_release_url("https://lakesidegames.net", "../x").is_err());
+        assert!(account_release_url("https://lakesidegames.net", "../x", BuildChannel::Full).is_err());
     }
 
     #[test]
@@ -637,11 +657,11 @@ mod tests {
         assert_eq!(download_platform("macos", "aarch64"), Some("macos-universal"));
         assert_eq!(download_platform("linux", "aarch64"), None);
         assert_eq!(
-            account_download_url("https://lakesidegames.net/", "corporate-warfare", "windows-x86_64")
+            account_download_url("https://lakesidegames.net/", "corporate-warfare", "windows-x86_64", BuildChannel::Full)
                 .unwrap(),
             "https://lakesidegames.net/account/launcher/download/corporate-warfare/windows-x86_64"
         );
-        assert!(account_download_url("https://x", "../etc", "linux-x86_64").is_err());
+        assert!(account_download_url("https://x", "../etc", "linux-x86_64", BuildChannel::Full).is_err());
     }
 
     #[test]

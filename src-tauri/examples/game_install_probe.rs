@@ -40,13 +40,18 @@ fn main() {
     let root = PathBuf::from(std::env::var("LAKESIDE_INSTALL_ROOT").expect("LAKESIDE_INSTALL_ROOT"));
     std::fs::create_dir_all(&root).expect("install root");
     let base = std::env::var("LAKESIDE_PLATFORM_API").unwrap_or_else(|_| "https://lakesidegames.net".to_string());
+    let channel = if std::env::var("BUILD_CHANNEL").as_deref() == Ok("preview") {
+        lib::BuildChannel::Preview
+    } else {
+        lib::BuildChannel::Full
+    };
     let os = std::env::consts::OS;
     let platform = lib::download_platform(os, std::env::consts::ARCH).expect("a supported platform");
 
     let (version, source, sha256, name, kind, client): (String, lib::DownloadSource, String, String, String, Option<&str>) =
         if product == "corporate-warfare" || product == "urban-sprawl" {
             let token = std::env::var("LAKESIDE_BEARER").expect("LAKESIDE_BEARER");
-            let url = lib::account_release_url(&base, &product).expect("release url");
+            let url = lib::account_release_url(&base, &product, channel).expect("release url");
             let body = tauri::async_runtime::block_on(async {
                 reqwest::Client::new()
                     .get(&url)
@@ -83,6 +88,7 @@ fn main() {
                     commercial_id: product.clone(),
                     token,
                     platform: platform.to_string(),
+                    channel,
                 },
                 file.sha256.clone(),
                 file.name.clone(),
@@ -91,7 +97,11 @@ fn main() {
             )
         } else {
             let manifest = tauri::async_runtime::block_on(lib::load_release_manifest()).expect("signed manifest");
-            let entry = manifest.products.get(&product).expect("product in the manifest");
+            let products = match channel {
+                lib::BuildChannel::Full => manifest.products,
+                lib::BuildChannel::Preview => manifest.previews,
+            };
+            let entry = products.get(&product).expect("product in the manifest");
             let artifact = entry.artifacts.get("linux-x64").expect("linux-x64 artifact");
             (
                 entry.version.clone(),

@@ -309,3 +309,13 @@ ul.plain li::before { content: "\2022"; color: var(--text-3); margin-right: 7px;
   .status { gap: 8px; padding-inline: 8px; }
   .status .bar { width: 48px; }
 }
+
+.build-options { margin-bottom: 12px; }
+.build-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+}
+.build-options p { margin: 6px 0 0; }

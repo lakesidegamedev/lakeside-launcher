@@ -13,7 +13,7 @@ mod activity;
 mod home;
 mod installer;
 pub use installer::{
-    account_release_url, download_platform, parse_account_release, AccountFile, AccountRelease,
+    account_release_url, download_platform, parse_account_release, AccountFile, AccountRelease, BuildChannel,
 };
 mod manage;
 mod shell;
@@ -351,6 +351,8 @@ pub struct ReleaseManifest {
     pub channel: String,
     pub generated_at: String,
     pub products: HashMap<String, ManifestProduct>,
+    #[serde(default)]
+    pub previews: HashMap<String, ManifestProduct>,
 }
 
 #[derive(Serialize)]
@@ -977,6 +979,7 @@ pub enum DownloadSource {
         token: String,
         /// Accounts platform key, such as `windows-x86_64` or `linux-x86_64-deb`.
         platform: String,
+        channel: installer::BuildChannel,
     },
 }
 
@@ -1011,8 +1014,9 @@ where
             commercial_id,
             token,
             platform,
+            channel,
         } => {
-            let endpoint = installer::account_download_url(base, commercial_id, platform)?;
+            let endpoint = installer::account_download_url(base, commercial_id, platform, *channel)?;
             let endpoint_url = Url::parse(&endpoint)
                 .map_err(|_| "The download address is not valid.".to_string())?;
 
@@ -1421,11 +1425,12 @@ fn installed_products(app: AppHandle) -> HashMap<String, InstalledProduct> {
 async fn fetch_account_release(
     app: &AppHandle,
     commercial_id: &str,
+    channel: installer::BuildChannel,
 ) -> Result<Option<installer::AccountRelease>, String> {
     let Some(stored) = read_session(app)? else {
         return Ok(None);
     };
-    let endpoint = installer::account_release_url(&platform_base(), commercial_id)?;
+    let endpoint = installer::account_release_url(&platform_base(), commercial_id, channel)?;
     let client = reqwest::Client::builder()
         .user_agent("lakeside-launcher")
         .timeout(Duration::from_secs(20))
@@ -1459,8 +1464,10 @@ async fn fetch_account_release(
 async fn account_release(
     app: AppHandle,
     commercial_id: String,
+    channel: Option<installer::BuildChannel>,
 ) -> Result<Option<ManifestProduct>, String> {
-    let Some(release) = fetch_account_release(&app, &commercial_id).await? else {
+    let channel = channel.unwrap_or_default();
+    let Some(release) = fetch_account_release(&app, &commercial_id, channel).await? else {
         return Ok(None);
     };
     let mut artifacts = HashMap::new();
@@ -1473,7 +1480,7 @@ async fn account_release(
             ManifestArtifact {
                 name: file.name.clone(),
                 kind: file.installer.clone(),
-                url: installer::account_download_url(&platform_base(), &commercial_id, &file.platform)?,
+                url: installer::account_download_url(&platform_base(), &commercial_id, &file.platform, channel)?,
                 size: file.size,
                 sha256: Some(file.sha256.clone()),
             },
@@ -1501,7 +1508,9 @@ async fn install_release(
     kind: String,
     commercial_id: Option<String>,
     package: Option<String>,
+    channel: Option<installer::BuildChannel>,
 ) -> Result<InstallResult, String> {
+    let channel = channel.unwrap_or_default();
     let (source, version, sha256, file_name, kind) = match commercial_id {
         Some(commercial_id) => {
             let stored = read_session(&app)?
@@ -1515,9 +1524,12 @@ async fn install_release(
                 None => installer::download_platform(std::env::consts::OS, std::env::consts::ARCH)
                     .ok_or_else(|| "This platform has no Lakeside download.".to_string())?,
             };
-            let release = fetch_account_release(&app, &commercial_id)
+            let release = fetch_account_release(&app, &commercial_id, channel)
                 .await?
                 .ok_or_else(|| "This account does not have a download for this game.".to_string())?;
+            if release.version != version {
+                return Err("A new build was published. Refresh the launcher to download it.".to_string());
+            }
             let file = release
                 .files
                 .iter()
@@ -1529,6 +1541,7 @@ async fn install_release(
                     commercial_id,
                     token: stored.token,
                     platform: platform.to_string(),
+                    channel,
                 },
                 release.version.clone(),
                 file.sha256.clone(),
